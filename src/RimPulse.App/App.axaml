@@ -1,0 +1,30 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="using:RimPulse.App.Converters"
+             x:Class="RimPulse.App.App"
+             RequestedThemeVariant="Dark">
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <SolidColorBrush x:Key="CanvasBrush" Color="#0D1015" />
+      <SolidColorBrush x:Key="PanelBrush" Color="#141920" />
+      <SolidColorBrush x:Key="PanelBorderBrush" Color="#232B36" />
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E9EEF5" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8A97A8" />
+      <SolidColorBrush x:Key="AccentBrush" Color="#5FE3A1" />
+      <SolidColorBrush x:Key="AccentQuietBrush" Color="#16321F" />
+      <SolidColorBrush x:Key="WarningBrush" Color="#F0C674" />
+      <SolidColorBrush x:Key="WarningQuietBrush" Color="#3A2E14" />
+      <SolidColorBrush x:Key="DangerBrush" Color="#F07A7E" />
+      <SolidColorBrush x:Key="DangerQuietBrush" Color="#3A1D20" />
+
+      <converters:LogLevelToBrushConverter x:Key="LogLevelBrush" />
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://RimPulse/Styles/RimPulseTheme.axaml" />
+  </Application.Styles>
+
+</Application>

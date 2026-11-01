@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RimPulse.Core</RootNamespace>
+    <AssemblyName>RimPulse.Core</AssemblyName>
+  </PropertyGroup>
+
+</Project>

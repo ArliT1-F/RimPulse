@@ -1,0 +1,19 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- RimPulse is built with a current .NET SDK. This has nothing to do with the
+         runtime a RimWorld installation uses; see docs/GAME-VERSIONS.md. -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Version>0.1.0</Version>
+    <Authors>RimPulse contributors</Authors>
+    <Product>RimPulse</Product>
+    <Description>Live RimWorld mod development and testing environment.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+artifacts/
+publish/
+*.binlog
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+.vscode/
+
+# Local runtime state (RimPulse stores its real state in XDG paths, not the repo)
+*.log
+config.local.json
+
+# OS noise
+.DS_Store
+Thumbs.db

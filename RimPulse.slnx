@@ -1,0 +1,12 @@
+<Solution>
+
+  <Folder Name="/src/">
+    <Project Path="src/RimPulse.App/RimPulse.App.csproj" />
+    <Project Path="src/RimPulse.Core/RimPulse.Core.csproj" />
+  </Folder>
+
+  <Folder Name="/tests/">
+    <Project Path="tests/RimPulse.Core.Tests/RimPulse.Core.Tests.csproj" />
+  </Folder>
+
+</Solution>
