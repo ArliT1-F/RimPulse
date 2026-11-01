@@ -1,0 +1,256 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:RimPulse.App.ViewModels"
+        xmlns:diagnostics="using:RimPulse.Core.Diagnostics"
+        x:Class="RimPulse.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="RimPulse"
+        Width="1180"
+        Height="840"
+        MinWidth="980"
+        MinHeight="680"
+        Background="{DynamicResource CanvasBrush}"
+        FontFamily="Inter, Noto Sans, Cantarell, Ubuntu, DejaVu Sans">
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- Header -->
+    <Border Grid.Row="0"
+            Background="{DynamicResource PanelBrush}"
+            BorderBrush="{DynamicResource PanelBorderBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="24,16">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Border Background="{DynamicResource AccentQuietBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="5"
+                    Padding="7,2"
+                    VerticalAlignment="Center">
+              <TextBlock Text="RIMPULSE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+            </Border>
+            <TextBlock Text="Build. Reload. Test. Repeat." Classes="caption" VerticalAlignment="Center" />
+          </StackPanel>
+          <TextBlock Text="RimWorld development environment" Classes="h1" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+          <TextBlock Text="{Binding StatusMessage}"
+                     Classes="caption"
+                     MaxWidth="430"
+                     TextWrapping="Wrap"
+                     TextAlignment="Right"
+                     VerticalAlignment="Center" />
+          <Button Content="Re-scan" Classes="accent" Command="{Binding RescanCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Body -->
+    <Grid Grid.Row="1" ColumnDefinitions="430,*" Margin="24,20,24,20">
+
+      <!-- Installations -->
+      <Border Classes="panel">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="RIMWORLD INSTALLATIONS" Classes="section" />
+            <TextBlock Grid.Column="1" Text="{Binding InstallationCountText}" Classes="caption" />
+          </Grid>
+
+          <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
+            <TextBox Text="{Binding CustomPathInput, Mode=TwoWay}"
+                     Watermark="Add an installation path, e.g. ~/GOG Games/RimWorld" />
+            <Button Grid.Column="1"
+                    Content="Add"
+                    Classes="quiet"
+                    Margin="8,0,0,0"
+                    Command="{Binding AddCustomPathCommand}" />
+          </Grid>
+
+          <Grid Grid.Row="2" Margin="0,12,0,0">
+            <ListBox ItemsSource="{Binding Installations}"
+                     SelectedItem="{Binding SelectedInstallation, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:InstallationViewModel">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="3">
+                      <TextBlock Text="{Binding Title}"
+                                 FontSize="13"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource TextPrimaryBrush}" />
+                      <TextBlock Text="{Binding Summary}" Classes="caption" />
+                      <TextBlock Text="{Binding PathText}"
+                                 Classes="caption mono"
+                                 TextTrimming="CharacterEllipsis"
+                                 MaxWidth="330"
+                                 HorizontalAlignment="Left" />
+                    </StackPanel>
+
+                    <Border Grid.Column="1"
+                            CornerRadius="9"
+                            Padding="8,2"
+                            VerticalAlignment="Top"
+                            Margin="8,2,0,0"
+                            Background="{DynamicResource AccentQuietBrush}"
+                            IsVisible="{Binding IsReady}">
+                      <TextBlock Text="Ready" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+                    </Border>
+
+                    <Border Grid.Column="1"
+                            CornerRadius="9"
+                            Padding="8,2"
+                            VerticalAlignment="Top"
+                            Margin="8,2,0,0"
+                            Background="{DynamicResource WarningQuietBrush}"
+                            IsVisible="{Binding IsUnsupported}">
+                      <TextBlock Text="UNSUPPORTED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" />
+                    </Border>
+
+                    <Border Grid.Column="1"
+                            CornerRadius="9"
+                            Padding="8,2"
+                            VerticalAlignment="Top"
+                            Margin="8,2,0,0"
+                            Background="{DynamicResource DangerQuietBrush}"
+                            IsVisible="{Binding IsIncomplete}">
+                      <TextBlock Text="INCOMPLETE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
+                    </Border>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <TextBlock IsVisible="{Binding HasNoInstallations}"
+                       Classes="caption"
+                       TextWrapping="Wrap"
+                       Margin="2,6,2,0"
+                       VerticalAlignment="Top"
+                       Text="Nothing detected yet. RimPulse searches Steam libraries, GOG folders and the RIMWORLD_DIR environment variable. Add a path above to point at a specific installation." />
+          </Grid>
+
+          <TextBlock Grid.Row="3"
+                     IsVisible="{Binding HasEnvironmentOverride}"
+                     Classes="caption"
+                     TextWrapping="Wrap"
+                     Margin="0,12,0,0"
+                     Text="{Binding EnvironmentOverrideDisplay}" />
+        </Grid>
+      </Border>
+
+      <!-- Details -->
+      <Border Grid.Column="1" Classes="panel" Margin="16,0,0,0">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+          <StackPanel Spacing="5">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Text="{Binding SelectedTitle}" Classes="h1" VerticalAlignment="Center" />
+
+              <Border CornerRadius="9" Padding="8,2" VerticalAlignment="Center"
+                      Background="{DynamicResource AccentQuietBrush}" IsVisible="{Binding SelectedIsReady}">
+                <TextBlock Text="Ready" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+              </Border>
+
+              <Border CornerRadius="9" Padding="8,2" VerticalAlignment="Center"
+                      Background="{DynamicResource WarningQuietBrush}" IsVisible="{Binding SelectedIsUnsupported}">
+                <TextBlock Text="UNSUPPORTED VERSION" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" />
+              </Border>
+
+              <Border CornerRadius="9" Padding="8,2" VerticalAlignment="Center"
+                      Background="{DynamicResource DangerQuietBrush}" IsVisible="{Binding SelectedIsIncomplete}">
+                <TextBlock Text="INCOMPLETE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
+              </Border>
+            </StackPanel>
+
+            <TextBlock Text="{Binding SelectedSubtitle}" Classes="caption" TextWrapping="Wrap" />
+          </StackPanel>
+
+          <ItemsControl Grid.Row="1" ItemsSource="{Binding SelectedDetails}" Margin="0,20,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DetailRow">
+                <Grid ColumnDefinitions="180,*" Margin="0,4">
+                  <TextBlock Text="{Binding Label}" Classes="caption" VerticalAlignment="Top" />
+                  <TextBlock Grid.Column="1"
+                             Text="{Binding Value}"
+                             Classes="body mono"
+                             TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <StackPanel Grid.Row="2" Spacing="8" Margin="0,20,0,0" IsVisible="{Binding SelectedHasProblems}">
+            <TextBlock Text="PROBLEMS DETECTED" Classes="section" />
+            <ItemsControl ItemsSource="{Binding SelectedProblems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProblemRow">
+                  <TextBlock Text="{Binding Text}"
+                             FontSize="12"
+                             Foreground="{DynamicResource WarningBrush}"
+                             TextWrapping="Wrap"
+                             Margin="0,2" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <StackPanel Grid.Row="4" Spacing="10" Margin="0,20,0,0">
+            <TextBlock Text="{Binding SelectionNote}" Classes="caption" TextWrapping="Wrap" />
+            <Button Content="Remove path from list"
+                    Classes="quiet"
+                    HorizontalAlignment="Left"
+                    Command="{Binding RemoveCustomPathCommand}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- Activity -->
+    <Border Grid.Row="2"
+            Background="{DynamicResource PanelBrush}"
+            BorderBrush="{DynamicResource PanelBorderBrush}"
+            BorderThickness="0,1,0,0"
+            Padding="24,14">
+      <Grid RowDefinitions="Auto,Auto">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="RECENT ACTIVITY" Classes="section" />
+          <TextBlock Grid.Column="1" Text="{Binding LogFilePath}" Classes="caption mono" />
+        </Grid>
+
+        <Border Grid.Row="1"
+                Margin="0,10,0,0"
+                Height="150"
+                Background="{DynamicResource CanvasBrush}"
+                BorderBrush="{DynamicResource PanelBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12,8">
+          <ScrollViewer x:Name="ActivityLogScroller" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding ActivityLog}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="diagnostics:LogEntry">
+                  <Grid ColumnDefinitions="66,42,*" Margin="0,1">
+                    <TextBlock Text="{Binding TimestampDisplay}" Classes="caption mono" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding LevelLabel}"
+                               Classes="caption mono"
+                               Foreground="{Binding Level, Converter={StaticResource LogLevelBrush}}" />
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Message}"
+                               Classes="caption"
+                               TextTrimming="CharacterEllipsis" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+      </Grid>
+    </Border>
+
+  </Grid>
+</Window>
