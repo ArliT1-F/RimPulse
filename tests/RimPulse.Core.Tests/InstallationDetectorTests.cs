@@ -42,7 +42,7 @@ public sealed class InstallationDetectorTests
             """);
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
-        var installations = detector.Detect();
+        var installations = detector.Detect(additionalRootPaths: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(installations);
         Assert.Equal(Path.GetFullPath(installRoot), installations[0].RootPath);
@@ -59,7 +59,7 @@ public sealed class InstallationDetectorTests
         var installRoot = FakeInstallation.CreateUnity(temp.CreateDirectory("RimWorld"));
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
-        var installations = detector.Detect([installRoot]);
+        var installations = detector.Detect([installRoot], TestContext.Current.CancellationToken);
 
         Assert.Single(installations);
         Assert.Equal(InstallationSource.Manual, installations[0].Source);
@@ -72,7 +72,7 @@ public sealed class InstallationDetectorTests
         var installRoot = FakeInstallation.CreateWaylith(temp.CreateDirectory("GOG Games", "RimWorld"));
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
-        var installations = detector.Detect();
+        var installations = detector.Detect(additionalRootPaths: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(installations);
         Assert.Equal(InstallationSource.Gog, installations[0].Source);
@@ -90,7 +90,7 @@ public sealed class InstallationDetectorTests
             CreateOptions(temp, installRoot),
             new DiagnosticLog());
 
-        var installations = detector.Detect();
+        var installations = detector.Detect(additionalRootPaths: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(installations);
         Assert.Equal(InstallationSource.EnvironmentVariable, installations[0].Source);
@@ -104,7 +104,7 @@ public sealed class InstallationDetectorTests
         temp.CreateDirectory(".steam", "steam", "steamapps", "common", "RimWorld");
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
-        var installations = detector.Detect();
+        var installations = detector.Detect(additionalRootPaths: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Empty(installations);
     }
@@ -116,7 +116,7 @@ public sealed class InstallationDetectorTests
         var empty = temp.CreateDirectory("empty-modish-folder");
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
-        var installations = detector.Detect([empty]);
+        var installations = detector.Detect([empty], TestContext.Current.CancellationToken);
 
         Assert.Single(installations);
         Assert.False(installations[0].IsUsable);
@@ -130,7 +130,7 @@ public sealed class InstallationDetectorTests
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
 
-        Assert.Empty(detector.Detect());
+        Assert.Empty(detector.Detect(additionalRootPaths: null, cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class InstallationDetectorTests
         var log = new DiagnosticLog();
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), log);
 
-        var installations = detector.Detect();
+        var installations = detector.Detect(additionalRootPaths: null, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Empty(installations);
         Assert.Contains(log.Snapshot(), entry => entry.Level == LogLevel.Warning);
@@ -156,7 +156,7 @@ public sealed class InstallationDetectorTests
         var current = FakeInstallation.CreateWaylith(temp.CreateDirectory("RimWorld17"), "1.7.0");
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
-        var installations = detector.Detect([old, current]);
+        var installations = detector.Detect([old, current], TestContext.Current.CancellationToken);
 
         Assert.Equal(2, installations.Count);
         Assert.Equal(Path.GetFullPath(current), installations[0].RootPath);

@@ -66,7 +66,7 @@
 
             <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
               <TextBox Text="{Binding CustomPathInput, Mode=TwoWay}"
-                       Watermark="Add an installation path, e.g. ~/GOG Games/RimWorld" />
+                       PlaceholderText="Add an installation path, e.g. ~/GOG Games/RimWorld" />
               <Button Grid.Column="1"
                       Content="Add"
                       Classes="quiet"
