@@ -2,8 +2,10 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using RimPulse.App.Services;
 using RimPulse.Core.Configuration;
+using RimPulse.Core.Build;
 using RimPulse.Core.Credits;
 using RimPulse.Core.Diagnostics;
+using RimPulse.Core.Game;
 using RimPulse.Core.Installations;
 using RimPulse.Core.Projects;
 using RimPulse.Core.Monitoring;
@@ -42,7 +44,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isActivityLogVisible = true;
     private string _projectPathInput = string.Empty;
     private string _projectSummary = "Choose a mod directory to inspect its metadata and structure.";
+    private ProjectRow? _selectedProject;
+    private ModProjectInspection? _lastProjectInspection;
+    private bool _suppressProjectSelection;
     private bool _isProjectBusy;
+    private bool _isBuilding;
+    private string _buildStatus = "No build has run yet.";
+    private long _buildSequence;
     private ProjectMonitor? _projectMonitor;
     private string _monitorStatus = "Not monitoring a project.";
     private bool _disposed;
@@ -70,8 +78,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ProjectDetails = new ObservableCollection<DetailRow>();
         ProjectProblems = new ObservableCollection<ProblemRow>();
         ProjectChanges = new ObservableCollection<ProjectChangeRow>();
+        Projects = new ObservableCollection<ProjectRow>();
+        BuildDiagnostics = new ObservableCollection<BuildDiagnosticRow>();
+        BuildDetails = new ObservableCollection<DetailRow>();
         InspectProjectCommand = new AsyncRelayCommand(() => InspectProjectAsync(ProjectPathInput),
             () => !IsProjectBusy && !string.IsNullOrWhiteSpace(ProjectPathInput), HandleCommandException);
+        AddProjectCommand = new AsyncRelayCommand(() => InspectProjectAsync(ProjectPathInput),
+            () => !IsProjectBusy && !string.IsNullOrWhiteSpace(ProjectPathInput), HandleCommandException);
+        RemoveProjectCommand = new AsyncRelayCommand(RemoveSelectedProjectAsync,
+            () => !IsProjectBusy && SelectedProject is not null, HandleCommandException);
+        BuildProjectCommand = new AsyncRelayCommand(BuildSelectedProjectAsync,
+            () => !IsBuilding && !IsProjectBusy && _lastProjectInspection is not null,
+            HandleCommandException);
         Credits = new ObservableCollection<CreditEntryViewModel>();
 
         foreach (var entry in CreditsCatalog.Entries)
@@ -104,11 +122,69 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<DetailRow> ProjectDetails { get; }
     public ObservableCollection<ProblemRow> ProjectProblems { get; }
+
+    /// <summary>Mod project directories the user has opened, newest first.</summary>
+    public ObservableCollection<ProjectRow> Projects { get; }
+
     public AsyncRelayCommand InspectProjectCommand { get; }
+
+    public AsyncRelayCommand AddProjectCommand { get; }
+
+    public AsyncRelayCommand RemoveProjectCommand { get; }
+
+    public ProjectRow? SelectedProject
+    {
+        get => _selectedProject;
+        set
+        {
+            if (!SetProperty(ref _selectedProject, value))
+            {
+                return;
+            }
+
+            RemoveProjectCommand.RaiseCanExecuteChanged();
+
+            if (value is null)
+            {
+                return;
+            }
+
+            ProjectPathInput = value.Path;
+
+            // Selecting the row that was just restored programmatically must not start a second inspection.
+            if (_suppressProjectSelection)
+            {
+                return;
+            }
+
+            _ = ActivateSelectedProjectAsync(value);
+        }
+    }
+
+    public bool HasProjects => Projects.Count > 0;
+
+    public bool HasNoProjects => Projects.Count == 0;
+
+    public string ProjectCountText => Projects.Count switch
+    {
+        0 => "no projects",
+        1 => "1 project",
+        var count => $"{count} projects",
+    };
     public bool IsProjectBusy
     {
         get => _isProjectBusy;
-        private set { if (SetProperty(ref _isProjectBusy, value)) InspectProjectCommand.RaiseCanExecuteChanged(); }
+        private set
+        {
+            if (!SetProperty(ref _isProjectBusy, value))
+            {
+                return;
+            }
+
+            InspectProjectCommand.RaiseCanExecuteChanged();
+            AddProjectCommand.RaiseCanExecuteChanged();
+            RemoveProjectCommand.RaiseCanExecuteChanged();
+        }
     }
     public string ProjectPathInput
     {
@@ -120,6 +196,42 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => _projectSummary;
         private set => SetProperty(ref _projectSummary, value);
     }
+
+    /// <summary>Compiler diagnostics of the last build.</summary>
+    public ObservableCollection<BuildDiagnosticRow> BuildDiagnostics { get; }
+
+    /// <summary>What the last build produced, read back from the assembly metadata.</summary>
+    public ObservableCollection<DetailRow> BuildDetails { get; }
+
+    public AsyncRelayCommand BuildProjectCommand { get; }
+
+    public bool IsBuilding
+    {
+        get => _isBuilding;
+        private set
+        {
+            if (SetProperty(ref _isBuilding, value))
+            {
+                BuildProjectCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public string BuildStatus
+    {
+        get => _buildStatus;
+        private set => SetProperty(ref _buildStatus, value);
+    }
+
+    /// <summary>Where the assemblies go, so the write into the mod directory is never a surprise.</summary>
+    public string BuildTargetText => _lastProjectInspection is null
+        ? "Select a project and a usable installation to build."
+        : SelectedInstallation?.Model is { IsUsable: true } installation
+            ? $"Compiles against {installation.DisplayName} ({installation.VersionDisplay}) and writes to " +
+              $"{Path.Combine(_lastProjectInspection.RootPath, "Assemblies")}."
+            : "Select a usable RimWorld installation: a mod can only be compiled against real game assemblies.";
+
+    public bool HasBuildDiagnostics => BuildDiagnostics.Count > 0;
 
     /// <summary>Inspect and remember a directory selected through the path field or folder picker.</summary>
     public async Task InspectProjectAsync(string path, bool persist = true)
@@ -142,7 +254,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 StartProjectMonitor(result.RootPath);
                 if (persist)
                 {
-                    _configuration.SelectedProjectPath = result.RootPath;
+                    RememberProject(result);
                     await SaveConfigurationAsync(CancellationToken.None).ConfigureAwait(true);
                 }
             }
@@ -162,13 +274,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         finally { IsProjectBusy = false; }
     }
 
+    /// <summary>
+    /// Rebuilds every project-derived row from one inspection result. Re-rendering (rather than appending)
+    /// keeps the load-folder projection consistent when the selected installation changes.
+    /// </summary>
     private void DisplayProjectInspection(ModProjectInspection result)
     {
+        _lastProjectInspection = result;
         ProjectDetails.Clear();
         ProjectProblems.Clear();
         ProjectDetails.Add(new DetailRow("Directory", result.RootPath));
         ProjectDetails.Add(new DetailRow("Detected folders", result.Folders.Count == 0 ? "none" : string.Join(", ", result.Folders)));
-        ProjectDetails.Add(new DetailRow("LoadFolders.xml", result.HasLoadFolders ? "present (not interpreted)" : "not found"));
+        ProjectDetails.Add(new DetailRow("LoadFolders.xml", DescribeLoadFolders(result.LoadFolders)));
         if (result.Metadata is { } metadata)
         {
             ProjectDetails.Add(new DetailRow("Name", metadata.Name ?? "not specified"));
@@ -179,9 +296,340 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 $"{d.DisplayName ?? d.PackageId ?? "unknown"} ({d.PackageId ?? "missing package ID"}){(d.Version is null ? "" : $" — {d.Version}")}");
             ProjectDetails.Add(new DetailRow("Declared dependencies", metadata.Dependencies.Count == 0 ? "none" : string.Join("\n", dependencies)));
         }
+        AddLoadFolderProjection(result);
         foreach (var problem in result.Problems) ProjectProblems.Add(new ProblemRow(problem));
+
+        // Build results belong to one project: keeping them would attribute another project's errors to this
+        // one, and bumping the sequence discards a build that is still running for the previous project.
+        Interlocked.Increment(ref _buildSequence);
+        BuildDiagnostics.Clear();
+        BuildDetails.Clear();
+        BuildStatus = "No build has run for this project.";
+        OnPropertiesChanged(nameof(HasBuildDiagnostics), nameof(BuildTargetText));
+        BuildProjectCommand.RaiseCanExecuteChanged();
         ProjectSummary = result.Metadata is null ? "Metadata unavailable; see problems below." :
             result.Problems.Count == 0 ? "Mod directory inspected." : "Mod directory inspected with warnings.";
+    }
+
+    private static string DescribeLoadFolders(LoadFoldersDocument document)
+    {
+        if (!document.Exists)
+        {
+            return "not found (RimWorld's default versioned-folder rules apply)";
+        }
+
+        if (document.Sections.Count == 0)
+        {
+            return "present, but no version sections were read";
+        }
+
+        var sections = document.Sections.Select(section => $"{section.ElementName} ({section.Entries.Count} entries)");
+        return $"present — {string.Join(", ", sections)}";
+    }
+
+    /// <summary>
+    /// Shows which folders RimPulse would expect to load for the selected installation's version. Only this
+    /// mod's package ID is treated as active, so conditional entries are reported, never silently dropped.
+    /// </summary>
+    private void AddLoadFolderProjection(ModProjectInspection result)
+    {
+        var document = result.LoadFolders;
+        if (!document.Exists || document.Sections.Count == 0)
+        {
+            return;
+        }
+
+        var version = SelectedInstallation?.Model.Version;
+        string[] activeIds = result.Metadata?.PackageId is { Length: > 0 } packageId ? [packageId] : [];
+        var plan = LoadFoldersReader.Evaluate(document, version ?? GameVersion.Unknown, activeIds);
+
+        var basis = activeIds.Length > 0
+            ? $"only {activeIds[0]} is treated as active; RimPulse does not know the game's real mod list"
+            : "no package ID is known for this mod, so conditional folders cannot be evaluated";
+        ProjectDetails.Add(new DetailRow("Load folder basis", basis));
+
+        if (plan.VersionText is null)
+        {
+            return;
+        }
+
+        ProjectDetails.Add(new DetailRow(
+            $"Content folders ({plan.VersionText})",
+            plan.Folders.Count == 0 ? "none" : string.Join("\n", plan.Folders.Select(DescribeFolder))));
+
+        if (plan.Skipped.Count > 0)
+        {
+            var skipped = plan.Skipped.Select(entry => $"{entry.Path} — requires {entry.ConditionDisplay}");
+            ProjectDetails.Add(new DetailRow("Conditional folders not loaded", string.Join("\n", skipped)));
+        }
+
+        foreach (var problem in plan.Problems)
+        {
+            ProjectProblems.Add(new ProblemRow(problem));
+        }
+    }
+
+    private static string DescribeFolder(string path) => path == "/" ? "/ (mod root)" : path;
+
+    /// <summary>Adds or refreshes the persisted list entry for a successfully inspected project.</summary>
+    private void RememberProject(ModProjectInspection result)
+    {
+        if (!_configuration.ProjectPaths.Exists(path => PathComparer.Equals(path, result.RootPath)))
+        {
+            _configuration.ProjectPaths.Insert(0, result.RootPath);
+            while (_configuration.ProjectPaths.Count > RimPulseConfiguration.MaxProjectPaths)
+            {
+                _configuration.ProjectPaths.RemoveAt(_configuration.ProjectPaths.Count - 1);
+            }
+        }
+
+        _configuration.SelectedProjectPath = result.RootPath;
+
+        var row = Projects.FirstOrDefault(candidate => PathComparer.Equals(candidate.Path, result.RootPath));
+        if (row is null)
+        {
+            row = new ProjectRow(result.RootPath);
+            Projects.Insert(0, row);
+        }
+
+        UpdateProjectRow(row, result);
+        SelectProject(row);
+        OnProjectListChanged();
+    }
+
+    private static void UpdateProjectRow(ProjectRow row, ModProjectInspection result)
+    {
+        row.IsMissing = !Directory.Exists(result.RootPath);
+
+        if (result.Metadata is { } metadata)
+        {
+            row.Title = string.IsNullOrWhiteSpace(metadata.Name) ? row.Title : metadata.Name;
+            row.Detail = metadata.PackageId is { Length: > 0 } packageId
+                ? metadata.SupportedVersions.Count == 0
+                    ? packageId
+                    : $"{packageId} · {string.Join(", ", metadata.SupportedVersions)}"
+                : "no package ID";
+            return;
+        }
+
+        row.Detail = result.RootPath;
+    }
+
+    private void SelectProject(ProjectRow? row)
+    {
+        if (ReferenceEquals(_selectedProject, row))
+        {
+            return;
+        }
+
+        _suppressProjectSelection = true;
+        try
+        {
+            SelectedProject = row;
+        }
+        finally
+        {
+            _suppressProjectSelection = false;
+        }
+    }
+
+    private void PopulateProjects()
+    {
+        Projects.Clear();
+
+        foreach (var path in _configuration.ProjectPaths)
+        {
+            Projects.Add(new ProjectRow(path) { IsMissing = !Directory.Exists(path) });
+        }
+
+        OnProjectListChanged();
+    }
+
+    private void OnProjectListChanged()
+        => OnPropertiesChanged(nameof(HasProjects), nameof(HasNoProjects), nameof(ProjectCountText));
+
+    private async Task ActivateSelectedProjectAsync(ProjectRow row)
+    {
+        try
+        {
+            await InspectProjectAsync(row.Path).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            HandleCommandException(ex);
+        }
+    }
+
+    /// <summary>
+    /// Discovers the mod's projects, resolves the game assemblies and compiles in dependency order. Runs off
+    /// the UI thread; a build started for a project that is no longer selected is discarded.
+    /// </summary>
+    private async Task BuildSelectedProjectAsync()
+    {
+        if (IsBuilding || IsProjectBusy)
+        {
+            return;
+        }
+
+        var inspection = _lastProjectInspection;
+        if (inspection is null)
+        {
+            BuildStatus = "Inspect a mod project before building.";
+            return;
+        }
+
+        var installation = SelectedInstallation?.Model;
+        if (installation is null || !installation.IsUsable)
+        {
+            BuildStatus = "Select a usable RimWorld installation — a mod is compiled against the real game assemblies.";
+            _log.Warning("Build", BuildStatus);
+            return;
+        }
+
+        IsBuilding = true;
+        var sequence = Interlocked.Increment(ref _buildSequence);
+        BuildDiagnostics.Clear();
+        BuildDetails.Clear();
+        OnPropertiesChanged(nameof(HasBuildDiagnostics));
+        BuildStatus = "Building…";
+        _log.Info("Build", $"Building '{inspection.RootPath}' against {installation.DisplayName} ({installation.VersionDisplay}).");
+
+        try
+        {
+            var outputDirectory = Path.Combine(inspection.RootPath, "Assemblies");
+            var outcome = await Task.Run(() =>
+            {
+                var inputs = BuildInputDiscovery.Discover(inspection.RootPath);
+                var references = GameReferenceResolver.Resolve(installation);
+                var build = inputs.HasUnits
+                    ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
+                    : null;
+
+                // Read the produced assemblies back from metadata, on the same worker thread: this is what the
+                // game would load, so it is worth showing, and it never loads the mod into RimPulse.
+                AssemblyInspection[] inspections = build is { Succeeded: true }
+                    ? build.OutputPaths.Select(AssemblyInspector.Inspect).ToArray()
+                    : [];
+                return (inputs, references, build, inspections);
+            }).ConfigureAwait(true);
+
+            // A newer build (or a different project) supersedes this result.
+            if (_disposed || sequence != Interlocked.Read(ref _buildSequence))
+            {
+                return;
+            }
+
+            foreach (var problem in outcome.inputs.Problems)
+            {
+                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            foreach (var problem in outcome.references.Problems)
+            {
+                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            if (outcome.build is null)
+            {
+                BuildStatus = outcome.inputs.Problems.FirstOrDefault()
+                              ?? outcome.references.Problems.FirstOrDefault()
+                              ?? "There was nothing to build.";
+                _log.Warning("Build", BuildStatus);
+                return;
+            }
+
+            foreach (var unit in outcome.build.Units)
+            {
+                foreach (var diagnostic in unit.Compilation.Diagnostics)
+                {
+                    BuildDiagnostics.Add(BuildDiagnosticRow.FromDiagnostic(diagnostic, unit.AssemblyName));
+                }
+            }
+
+            foreach (var problem in outcome.build.Problems)
+            {
+                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            foreach (var assembly in outcome.inspections)
+            {
+                BuildDetails.Add(new DetailRow($"Assembly ({Path.GetFileName(assembly.AssemblyPath)})", assembly.Summary));
+
+                if (assembly.References.Count > 0)
+                {
+                    BuildDetails.Add(new DetailRow("References", string.Join(", ", assembly.References)));
+                }
+
+                if (assembly.Types.Count > 0)
+                {
+                    var names = assembly.Types
+                        .Take(40)
+                        .Select(type => type.FullName)
+                        .ToArray();
+                    var more = assembly.Types.Count > names.Length || assembly.TypesTruncated
+                        ? $"{Environment.NewLine}… and {assembly.Types.Count - names.Length} more"
+                        : string.Empty;
+                    BuildDetails.Add(new DetailRow("Types", string.Join(Environment.NewLine, names) + more));
+                }
+
+                foreach (var problem in assembly.Problems)
+                {
+                    BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+                }
+            }
+
+            BuildStatus = outcome.build.Summary;
+
+            if (outcome.build.Succeeded)
+            {
+                _log.Info("Build", outcome.build.Summary);
+            }
+            else
+            {
+                _log.Warning("Build", outcome.build.Summary);
+            }
+        }
+        finally
+        {
+            IsBuilding = false;
+        }
+    }
+
+    private async Task RemoveSelectedProjectAsync()
+    {
+        var row = SelectedProject;
+        if (row is null || IsProjectBusy)
+        {
+            return;
+        }
+
+        IsProjectBusy = true;
+        StopProjectMonitor();
+        ProjectChanges.Clear();
+        MonitorStatus = "Not monitoring a project.";
+
+        try
+        {
+            _configuration.ProjectPaths.RemoveAll(path => PathComparer.Equals(path, row.Path));
+            if (_configuration.SelectedProjectPath is { } selected && PathComparer.Equals(selected, row.Path))
+            {
+                _configuration.SelectedProjectPath = null;
+            }
+
+            Projects.Remove(row);
+            SelectProject(null);
+            _lastProjectInspection = null;
+            ProjectDetails.Clear();
+            ProjectProblems.Clear();
+            ProjectSummary = "Choose a mod directory to inspect its metadata and structure.";
+            OnProjectListChanged();
+            _log.Info("Projects", $"Removed '{row.Path}' from the project list.");
+            await SaveConfigurationAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsProjectBusy = false;
+        }
     }
 
     private void StartProjectMonitor(string rootPath)
@@ -364,6 +812,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             RebuildSelectedDetails();
 
+            // The load-folder projection depends on the selected game version.
+            if (_lastProjectInspection is { } inspection)
+            {
+                DisplayProjectInspection(inspection);
+            }
+
+            OnPropertyChanged(nameof(BuildTargetText));
+
             if (!_suppressSelectionPersistence)
             {
                 PersistSelection(value);
@@ -464,8 +920,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 _log.Warning("Configuration", loadResult.Message);
             }
 
+            PopulateProjects();
+
+            foreach (var path in _configuration.ProjectPaths.Where(path => !Directory.Exists(path)).ToArray())
+            {
+                _log.Warning("Projects", $"The saved project '{path}' is not accessible; it is listed but not inspected.");
+            }
+
             if (!string.IsNullOrWhiteSpace(_configuration.SelectedProjectPath))
             {
+                SelectProject(Projects.FirstOrDefault(row => PathComparer.Equals(row.Path, _configuration.SelectedProjectPath!)));
                 await InspectProjectAsync(_configuration.SelectedProjectPath, persist: false).ConfigureAwait(true);
             }
 

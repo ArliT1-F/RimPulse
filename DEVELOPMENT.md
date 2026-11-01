@@ -143,12 +143,13 @@ Honest accounting of how the current code has been verified. Update this section
 
 | Area | Status | How it was verified |
 | --- | --- | --- |
-| C# syntax of all sources | **Not yet verified** | The foundation passed CI; project inspection and monitoring changes need a new build |
-| XAML / MSBuild / solution files | **Not yet verified** | Foundation AXAML passed CI; the new project tab needs a new build |
-| `dotnet build` of the solution | **Not yet verified** | The foundation passed in GitHub Actions; changes need a fresh run |
-| `dotnet test` of the suite | **Not yet verified** | The foundation passed 99 tests; new project, monitoring and XML tests need a fresh run |
+| C# syntax of all sources | Verified | `dotnet build` passes in CI on every push |
+| XAML / MSBuild / solution files | Verified | The app, including the project list and build panel AXAML, compiles in CI (compiled bindings turn binding typos into build errors) |
+| `dotnet build` of the solution | Verified | GitHub Actions, Release configuration |
+| `dotnet test` of the suite | Verified | GitHub Actions, Release configuration, 177 tests; includes the `LoadFolders`, build-input, reference-resolution, Roslyn compiler and assembly-inspection tests |
 | Credits catalog completeness | Verified | Encoded as tests (`CreditsCatalogTests`) and re-checked on every push |
-| Opening the desktop window | **Not verified** | CI has no display server; verify locally with `dotnet run --project src/RimPulse.App` |
+| Opening the desktop window | Verified for the previous milestone | Run on Linux with a real desktop session; the new project list and build panel need the same treatment |
+| Building a mod against a real installation | **Not verified** | The compiler is tested against the test runtime's assemblies; a build against real 1.6/1.7 game assemblies has not been run |
 | Installation detection against a real RimWorld 1.6 install | **Not verified** | Requires a machine with the game installed |
 | Installation detection against a real RimWorld 1.7 install | **Not verified** | Requires a machine with the game installed |
 | Runtime behaviour (launching the game, IPC, reload) | Not implemented | Milestones 4–6 |
@@ -192,12 +193,13 @@ Failing runs attach the tail of the build/test output as a commit comment, becau
 reachable from every environment that needs to read them. Remove that step if your team does not want the
 comment.
 
-## 11. Next steps (milestone 2 and beyond)
+## 11. Next steps (milestone 3 and beyond)
 
-1. **Mod project management** — single-directory selection and metadata/folder inspection are in progress.
-   Still needed: multiple persisted projects, dependency resolution and interpretation of `LoadFolders.xml`
-   for 1.6/1.7 content folders.
-2. **File monitoring** — single selected project monitoring, debouncing and classification are implemented;
-   monitoring multiple projects remains. Notifications are best-effort; errors require a manual refresh.
-3. **Build and validation** — changed XML is checked for well-formedness only; full validation, Roslyn
-   compilation and reference resolution remain before runtime work can rely on a trustworthy build result.
+1. **XML validation** — changed XML is checked for well-formedness only. Definition-level checks (root
+   elements, `defName` uniqueness, `Abstract`/`ParentName` references) and RimWorld schema validation remain.
+2. **Build fidelity** — the MSBuild subset RimPulse understands is documented in the README. Conditional
+   properties/items, additional wildcards and `Directory.Build.props` are not evaluated yet.
+3. **Dependency resolution** — declared dependencies are displayed, not resolved against installed mods; the
+   load-folder projection currently treats only the mod itself as active.
+4. **Runtime integration (milestone 4)** — companion mod, IPC and process management. Compilation is the last
+   prerequisite that is now in place.

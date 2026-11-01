@@ -10,6 +10,11 @@
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.4" />
 
+    <!-- Compiler. Mod C# is compiled in-process so a project targeting .NET Framework 4.7.2 can be built
+         on Linux (where its own `dotnet build` cannot run) and RimPulse gets structured diagnostics instead
+         of parsed console output. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+
     <!-- Test framework. xunit.v3 runs on Microsoft.Testing.Platform, so no VSTest
          packages are required to execute the suite with `dotnet test`. -->
     <PackageVersion Include="xunit.v3" Version="4.0.2" />

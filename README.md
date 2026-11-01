@@ -70,8 +70,18 @@ This repository is being built incrementally, one milestone at a time. Features 
   when a directory is not a usable installation.
 - Persists the selected installation and any custom paths (`config.json`) across sessions, tolerating a
   missing or corrupt configuration file.
-- Selects and remembers one mod directory, reads its `About/About.xml` metadata and declared dependencies, and reports common content folders and the presence of `LoadFolders.xml`.
+- Keeps a list of mod directories, selects and remembers several of them, reads each `About/About.xml` metadata
+  and declared dependencies, and reports common content folders.
+- Interprets `LoadFolders.xml`: version sections (`<v1.6>`, `<v1.7>`), `IfModActive` / `IfModActiveAny` /
+  `IfModActiveAll` / `IfModNotActive` conditions and the legacy `_steam` suffix, projected onto the selected
+  installation's version. Folders that a condition excludes are listed with that condition, never dropped
+  silently; RimPulse only knows the mod itself is active, so it says so instead of guessing a mod list.
 - Monitors the selected directory, batches and classifies changes, refreshes metadata when `About.xml` changes, and checks changed XML files for well-formedness (not RimWorld semantics).
+- Finds the mod's `.csproj` projects, resolves the game assemblies of the selected installation and **compiles
+  the mod in-process with Roslyn**, reporting every diagnostic with file, line and column. A build writes the
+  assembly into the mod's `Assemblies` folder only when you press **Build** and only after compilation
+  succeeded. The produced assembly is then read back from its metadata (name, version, references, types), so
+  the build panel shows what the game would actually load.
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
@@ -79,8 +89,8 @@ This repository is being built incrementally, one milestone at a time. Features 
 
 ### Deliberately not there yet
 
-No multi-project management, full XML/schema validation, compilation, game launching, hot reload or testing environment. Those
-are later milestones; nothing in the UI pretends otherwise.
+No dependency resolution against installed mods, no XML schema/semantic validation, no game launching, hot
+reload or testing environment. Those are later milestones; nothing in the UI pretends otherwise.
 
 ---
 
@@ -114,17 +124,42 @@ Full build, test, publish and troubleshooting instructions live in [`DEVELOPMENT
 
 ## Inspecting a mod project
 
-Open **Mod project**, browse for a mod root or enter its path, then choose **Inspect / refresh**.
-The last existing directory is remembered and inspected again at startup. The display includes the name,
-package ID, author(s), supported versions, declared dependencies and common folders. Missing or malformed
-metadata is reported; no files are changed. Dependency declarations are displayed, not resolved against
-installed mods. `LoadFolders.xml` is detected but not interpreted, so listed folders do not imply an active
-load order. The selected project is watched while RimPulse is open; detected changes are debounced and
-listed by path and category. About.xml changes refresh the metadata; changed XML is checked for syntax only,
-not against the RimWorld schema. `bin`, `obj`, VCS/editor directories and common temporary files are ignored.
-File-system notifications are best-effort; monitoring errors are reported, and **Inspect / refresh** re-reads
-the project and restarts monitoring. Changes during that refresh may be missed. Nothing triggers a build or
-reload yet.
+Open **Mod project**, browse for a mod root or enter its path, then choose **Add**. Projects you add are
+listed on the left, remembered across sessions and inspected again at startup; selecting one re-inspects it,
+and **Remove from list** forgets it without touching the directory. The display includes the name, package ID,
+author(s), supported versions and declared dependencies. Missing or malformed metadata is reported, and no
+files are changed.
+
+Dependency declarations are displayed, not resolved against installed mods. `LoadFolders.xml` is interpreted
+per game version as described below. Only the selected project is watched while RimPulse is open; detected
+changes are debounced and listed by path and category. About.xml changes refresh the metadata; changed XML is
+checked for syntax only, not against the RimWorld schema. `bin`, `obj`, VCS/editor directories and common
+temporary files are ignored. File-system notifications are best-effort; monitoring errors are reported, and
+**Inspect / refresh** re-reads the project and restarts monitoring. Changes during that refresh may be missed.
+
+### Interpreting `LoadFolders.xml`
+
+For the selected installation's version, RimPulse reads the matching `<v1.6>`/`<v1.7>` section and lists the
+folders that version would load, together with the entries whose conditions exclude them and the condition
+that did it. `IfModActive`, `IfModActiveAny` and `IfModNotActive` are treated as "or" lists,
+`IfModActiveAll` (RimWorld 1.6+) as "and", and several attributes on one entry must all pass — the semantics
+published by the RimWorld wiki. Only the mod's own `packageId` is treated as active, because RimPulse does not
+read the game's active mod list; conditional folders are therefore reported, not assumed. A missing section
+is reported as such: `LoadFolders.xml` supersedes RimWorld's default versioned-folder rules, and RimPulse will
+not invent a folder list for that version.
+
+### Building the mod
+
+**Build mod** compiles the mod's C# projects against the selected installation and writes the resulting
+assemblies into the mod's `Assemblies` folder — the only place RimPulse ever writes inside a mod directory, and
+only as a direct result of pressing the button. Projects are compiled in dependency order, so a referenced
+project is built first and the projects that reference it are linked against that output. Diagnostics are
+listed with file, line and column. `DEBUG` and `TRACE` are defined, matching a development build.
+
+RimPulse reads a documented subset of MSBuild: `Compile` items (literal paths, `*.cs` and `**/*.cs`), `Reference`
+with `HintPath`, `ProjectReference`, and the unconditional `AssemblyName`, `TargetFramework`, `LangVersion`,
+`DefineConstants`, `AllowUnsafeBlocks` and `Nullable` properties. Conditional properties and items, other
+wildcards and MSBuild targets are not evaluated, and anything ignored is reported rather than guessed.
 
 ## How installation detection works
 
@@ -168,8 +203,9 @@ src/
     Game/                 GameVersion model (1.6 / 1.7, future versions tolerated)
     Installations/        Layout probing, version file reading, Steam VDF parsing, detection
     Platform/             Host platform abstraction (Linux / Windows / macOS)
-    Projects/             Read-only mod metadata and folder inspection
+    Projects/             Mod metadata, content folders and LoadFolders.xml interpretation
     Monitoring/           Batched file notifications and classification
+    Build/                Project discovery, game reference resolution, Roslyn compilation
     Validation/           Changed XML well-formedness checks
   RimPulse.App/           Avalonia desktop application (MVVM, hand-written, no MVVM framework)
     Views/ ViewModels/ Styles/ Converters/ Services/
@@ -186,9 +222,9 @@ DEVELOPMENT.md            Exact build / run / test / publish / troubleshooting c
 
 RimPulse is built in conversation with the RimWorld modding community. The projects below were studied as
 reference for specific milestones; **every creator and repository is also featured inside the application**
-(header → **Credits**), which is the authoritative list. RimPulse adapts no RimWorld tooling code in milestone 1
+(header → **Credits**), which is the authoritative list. RimPulse adapts no RimWorld tooling code
 — those projects were studied as reference, and the license column exists so that any future adoption decision
-is informed. The two dependencies that RimPulse actually builds on are listed as well.
+is informed. The three dependencies that RimPulse actually builds on are listed as well.
 
 | Project | Creator | License | Relevant to |
 | --- | --- | --- | --- |
@@ -206,6 +242,7 @@ is informed. The two dependencies that RimPulse actually builds on are listed as
 | [RimSort](https://github.com/RimSort/RimSort) | RimSort contributors | GPL-3.0 | Mod metadata and load-order handling (reference only) |
 | [RimworldXsd](https://github.com/Ragonfana/RimworldXsd) | Ragonfana | No license declared | XML validation (reference only) |
 | [Avalonia](https://github.com/AvaloniaUI/Avalonia) | Avalonia Team | MIT | **Shipped dependency** — the desktop UI framework |
+| [Roslyn](https://github.com/dotnet/roslyn) | Roslyn contributors (Microsoft and the .NET community) | MIT | **Shipped dependency** — compiles mod C# in-process (milestone 3) |
 | [xUnit.net](https://github.com/xunit/xunit) | xUnit.net contributors | Apache-2.0 | **Development dependency** — runs the test suite, not shipped |
 
 **Attribution policy.** If code, data or assets from any of these projects are ever adapted, the credit entry
@@ -227,15 +264,16 @@ Honesty matters more than a green checkmark. Current state, on Ubuntu with the .
 
 | Check | Result |
 | --- | --- |
-| `dotnet build RimPulse.slnx -c Release` | Foundation passed in CI; project inspection changes not yet verified |
-| `dotnet test RimPulse.slnx -c Release` | Foundation passed 99 tests in CI; new tests not yet verified |
-| Opening the window on a real desktop | **Not verified** — CI has no display server; run `dotnet run --project src/RimPulse.App` locally |
-| Detection against a real RimWorld 1.6 / 1.7 install | **Not verified** — needs a machine with the game |
+| `dotnet build RimPulse.slnx -c Release` | **Passes in CI** (GitHub Actions, Ubuntu, .NET 10) with warnings as the compiler sees them; no warnings in the last run |
+| `dotnet test RimPulse.slnx -c Release` | **Passes in CI** — 177 tests, including the project, `LoadFolders`, build-input, reference-resolution, Roslyn compiler and assembly-inspection tests |
+| The desktop window on a real desktop | **Verified locally for the previous milestone** — the app started, detected an installation and inspected a mod directory on Linux. The new project list and build panel have not been run on a desktop yet |
+| Detection against a real RimWorld installation | **Partially verified** — a scan on the author's machine reported one installation; whether its version was confirmed was not recorded |
+| Building a real mod against a real installation | **Not verified** — the compiler is exercised in CI against the test runtime's assemblies, not against game assemblies from a real install |
 | Windows / macOS runtime behaviour | **Not verified** — path handling is unit tested for all three platforms |
 
-The first CI run earned its keep: it found a real defect (the log sink left no active log file after a
-rotation, which would break `tail -f`) and one wrong test expectation — both fixed. Only green-that-is-true
-counts here.
+CI has earned its keep twice: it found a real defect (the log sink left no active log file after a rotation,
+which would break `tail -f`) and several wrong test expectations. Only green-that-is-true counts here.
 
-Nothing in milestone 1 requires RimWorld to be installed, so the suite runs on any development machine; see
+Everything except installation detection and the compiler's use against real game assemblies runs without
+RimWorld installed, so the suite works on any development machine; see
 [`DEVELOPMENT.md`](DEVELOPMENT.md#verification-status).
