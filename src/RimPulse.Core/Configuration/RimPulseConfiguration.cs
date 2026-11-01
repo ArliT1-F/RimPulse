@@ -19,6 +19,9 @@ public sealed class RimPulseConfiguration
     /// <summary>Installation roots the user added by hand (e.g. a GOG copy outside Steam).</summary>
     public List<string> CustomInstallationPaths { get; set; } = [];
 
+    /// <summary>Last selected mod project directory, if any.</summary>
+    public string? SelectedProjectPath { get; set; }
+
     /// <summary>Whether RimPulse scans the well-known locations on startup.</summary>
     public bool AutoDetectOnStartup { get; set; } = true;
 
@@ -28,6 +31,8 @@ public sealed class RimPulseConfiguration
         SelectedInstallationPath = string.IsNullOrWhiteSpace(SelectedInstallationPath)
             ? null
             : SelectedInstallationPath.Trim();
+
+        SelectedProjectPath = string.IsNullOrWhiteSpace(SelectedProjectPath) ? null : SelectedProjectPath.Trim();
 
         var cleaned = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

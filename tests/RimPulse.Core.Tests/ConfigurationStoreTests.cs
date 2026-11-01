@@ -31,6 +31,7 @@ public sealed class ConfigurationStoreTests
         var configuration = new RimPulseConfiguration
         {
             SelectedInstallationPath = "/games/RimWorld",
+            SelectedProjectPath = "/mods/Test",
             AutoDetectOnStartup = false,
             CustomInstallationPaths = ["/games/RimWorld", "/games/RimWorld17"],
         };
@@ -40,6 +41,7 @@ public sealed class ConfigurationStoreTests
 
         Assert.Equal(ConfigurationLoadStatus.Loaded, result.Status);
         Assert.Equal("/games/RimWorld", result.Configuration.SelectedInstallationPath);
+        Assert.Equal("/mods/Test", result.Configuration.SelectedProjectPath);
         Assert.False(result.Configuration.AutoDetectOnStartup);
         Assert.Equal(2, result.Configuration.CustomInstallationPaths.Count);
         Assert.Equal("/games/RimWorld17", result.Configuration.CustomInstallationPaths[1]);

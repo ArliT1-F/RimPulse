@@ -54,7 +54,9 @@
       </Border>
 
       <!-- Body -->
-      <Grid Grid.Row="1" ColumnDefinitions="430,*" Margin="24,20,24,20">
+      <TabControl Grid.Row="1" Margin="24,20,24,20">
+        <TabItem Header="Installations">
+      <Grid ColumnDefinitions="430,*">
 
         <!-- Installations -->
         <Border Classes="panel">
@@ -213,6 +215,61 @@
           </Grid>
         </Border>
       </Grid>
+        </TabItem>
+        <TabItem Header="Mod project">
+          <Border Classes="panel" Margin="0,12,0,0">
+            <Grid RowDefinitions="Auto,Auto,*">
+              <StackPanel Spacing="5">
+                <TextBlock Text="MOD PROJECT" Classes="section" />
+                <TextBlock Text="Select an existing mod root. RimPulse reads it without modifying files." Classes="caption" TextWrapping="Wrap" />
+              </StackPanel>
+              <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" Margin="0,14,0,0">
+                <TextBox Text="{Binding ProjectPathInput, Mode=TwoWay}" PlaceholderText="Path to mod directory" />
+                <Button Grid.Column="1" Content="Browse…" Classes="quiet" Margin="8,0,0,0" Click="OnBrowseProject" />
+                <Button Grid.Column="2" Content="Inspect / refresh" Classes="accent" Margin="8,0,0,0" Command="{Binding InspectProjectCommand}" />
+              </Grid>
+              <ScrollViewer Grid.Row="2" Margin="0,18,0,0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="14">
+                  <TextBlock Text="{Binding ProjectSummary}" Classes="caption" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding ProjectDetails}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DetailRow">
+                        <Grid ColumnDefinitions="180,*" Margin="0,4">
+                          <TextBlock Text="{Binding Label}" Classes="caption" />
+                          <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="body mono" TextWrapping="Wrap" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <ItemsControl ItemsSource="{Binding ProjectProblems}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ProblemRow">
+                        <TextBlock Text="{Binding Text}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,2" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="FILE MONITOR" Classes="section" Margin="0,8,0,0" />
+                  <TextBlock Text="{Binding MonitorStatus}" Classes="caption" TextWrapping="Wrap" />
+                  <TextBlock Text="Recent changes (latest 250). XML syntax is checked only; no build or reload is performed." Classes="caption" TextWrapping="Wrap" />
+                  <ItemsControl ItemsSource="{Binding ProjectChanges}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ProjectChangeRow">
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="70,100,110,*" Margin="0,4">
+                          <TextBlock Text="{Binding Time}" Classes="caption mono" />
+                          <TextBlock Grid.Column="1" Text="{Binding Category}" Classes="caption" />
+                          <TextBlock Grid.Column="2" Text="{Binding Change}" Classes="caption" />
+                          <TextBlock Grid.Column="3" Text="{Binding Path}" Classes="caption mono" TextWrapping="Wrap" />
+                          <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding Validation}" Classes="caption" TextWrapping="Wrap" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+          </Border>
+        </TabItem>
+      </TabControl>
 
       <!-- Activity -->
       <Border Grid.Row="2"

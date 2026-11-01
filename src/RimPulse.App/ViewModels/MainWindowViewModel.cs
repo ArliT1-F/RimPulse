@@ -5,14 +5,17 @@ using RimPulse.Core.Configuration;
 using RimPulse.Core.Credits;
 using RimPulse.Core.Diagnostics;
 using RimPulse.Core.Installations;
+using RimPulse.Core.Projects;
+using RimPulse.Core.Monitoring;
+using RimPulse.Core.Validation;
 
 namespace RimPulse.App.ViewModels;
 
 /// <summary>
-/// Milestone 1 view model: installation discovery, selection and diagnostics. Everything shown in the UI
+/// Installation discovery, mod inspection, selection and diagnostics. Everything shown in the UI
 /// is produced by real work — no placeholder panels for features that do not exist yet.
 /// </summary>
-public sealed class MainWindowViewModel : ObservableObject
+public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private const int MaxActivityEntries = 250;
 
@@ -37,6 +40,13 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _suppressSelectionPersistence;
     private bool _isCreditsOpen;
     private bool _isActivityLogVisible = true;
+    private string _projectPathInput = string.Empty;
+    private string _projectSummary = "Choose a mod directory to inspect its metadata and structure.";
+    private bool _isProjectBusy;
+    private ProjectMonitor? _projectMonitor;
+    private string _monitorStatus = "Not monitoring a project.";
+    private bool _disposed;
+    private long _metadataRefreshSequence;
 
     public MainWindowViewModel(
         IRimWorldInstallationDetector detector,
@@ -57,6 +67,11 @@ public sealed class MainWindowViewModel : ObservableObject
         SelectedDetails = new ObservableCollection<DetailRow>();
         SelectedProblems = new ObservableCollection<ProblemRow>();
         ActivityLog = new ObservableCollection<LogEntry>();
+        ProjectDetails = new ObservableCollection<DetailRow>();
+        ProjectProblems = new ObservableCollection<ProblemRow>();
+        ProjectChanges = new ObservableCollection<ProjectChangeRow>();
+        InspectProjectCommand = new AsyncRelayCommand(() => InspectProjectAsync(ProjectPathInput),
+            () => !IsProjectBusy && !string.IsNullOrWhiteSpace(ProjectPathInput), HandleCommandException);
         Credits = new ObservableCollection<CreditEntryViewModel>();
 
         foreach (var entry in CreditsCatalog.Entries)
@@ -78,6 +93,181 @@ public sealed class MainWindowViewModel : ObservableObject
         ToggleActivityLogCommand = new RelayCommand(() => IsActivityLogVisible = !IsActivityLogVisible);
 
         _log.EntryWritten += OnLogEntry;
+    }
+
+    public ObservableCollection<ProjectChangeRow> ProjectChanges { get; }
+    public string MonitorStatus
+    {
+        get => _monitorStatus;
+        private set => SetProperty(ref _monitorStatus, value);
+    }
+
+    public ObservableCollection<DetailRow> ProjectDetails { get; }
+    public ObservableCollection<ProblemRow> ProjectProblems { get; }
+    public AsyncRelayCommand InspectProjectCommand { get; }
+    public bool IsProjectBusy
+    {
+        get => _isProjectBusy;
+        private set { if (SetProperty(ref _isProjectBusy, value)) InspectProjectCommand.RaiseCanExecuteChanged(); }
+    }
+    public string ProjectPathInput
+    {
+        get => _projectPathInput;
+        set { if (SetProperty(ref _projectPathInput, value ?? string.Empty)) InspectProjectCommand.RaiseCanExecuteChanged(); }
+    }
+    public string ProjectSummary
+    {
+        get => _projectSummary;
+        private set => SetProperty(ref _projectSummary, value);
+    }
+
+    /// <summary>Inspect and remember a directory selected through the path field or folder picker.</summary>
+    public async Task InspectProjectAsync(string path, bool persist = true)
+    {
+        if (IsProjectBusy || string.IsNullOrWhiteSpace(path)) return;
+        IsProjectBusy = true;
+        StopProjectMonitor();
+        ProjectChanges.Clear();
+        MonitorStatus = "Monitoring paused during inspection.";
+        ProjectSummary = "Inspecting mod directory…";
+        try
+        {
+            var result = await Task.Run(() => ModProjectInspector.Inspect(path)).ConfigureAwait(true);
+            if (_disposed) return;
+            ProjectPathInput = result.RootPath;
+            DisplayProjectInspection(result);
+            _log.Info("Projects", $"Inspected mod directory '{result.RootPath}': {result.Problems.Count} problem(s).");
+            if (Directory.Exists(result.RootPath))
+            {
+                StartProjectMonitor(result.RootPath);
+                if (persist)
+                {
+                    _configuration.SelectedProjectPath = result.RootPath;
+                    await SaveConfigurationAsync(CancellationToken.None).ConfigureAwait(true);
+                }
+            }
+            else
+            {
+                MonitorStatus = "Not monitoring: directory is unavailable. Inspect again to retry.";
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            ProjectDetails.Clear();
+            ProjectProblems.Clear();
+            ProjectSummary = "Could not inspect the mod directory: " + ex.Message;
+            MonitorStatus = "Not monitoring. Inspect again to retry.";
+            _log.Warning("Projects", ProjectSummary);
+        }
+        finally { IsProjectBusy = false; }
+    }
+
+    private void DisplayProjectInspection(ModProjectInspection result)
+    {
+        ProjectDetails.Clear();
+        ProjectProblems.Clear();
+        ProjectDetails.Add(new DetailRow("Directory", result.RootPath));
+        ProjectDetails.Add(new DetailRow("Detected folders", result.Folders.Count == 0 ? "none" : string.Join(", ", result.Folders)));
+        ProjectDetails.Add(new DetailRow("LoadFolders.xml", result.HasLoadFolders ? "present (not interpreted)" : "not found"));
+        if (result.Metadata is { } metadata)
+        {
+            ProjectDetails.Add(new DetailRow("Name", metadata.Name ?? "not specified"));
+            ProjectDetails.Add(new DetailRow("Package ID", metadata.PackageId ?? "not specified"));
+            ProjectDetails.Add(new DetailRow("Author", metadata.Author ?? "not specified"));
+            ProjectDetails.Add(new DetailRow("Supported versions", metadata.SupportedVersions.Count == 0 ? "not specified" : string.Join(", ", metadata.SupportedVersions)));
+            var dependencies = metadata.Dependencies.Select(d =>
+                $"{d.DisplayName ?? d.PackageId ?? "unknown"} ({d.PackageId ?? "missing package ID"}){(d.Version is null ? "" : $" — {d.Version}")}");
+            ProjectDetails.Add(new DetailRow("Declared dependencies", metadata.Dependencies.Count == 0 ? "none" : string.Join("\n", dependencies)));
+        }
+        foreach (var problem in result.Problems) ProjectProblems.Add(new ProblemRow(problem));
+        ProjectSummary = result.Metadata is null ? "Metadata unavailable; see problems below." :
+            result.Problems.Count == 0 ? "Mod directory inspected." : "Mod directory inspected with warnings.";
+    }
+
+    private void StartProjectMonitor(string rootPath)
+    {
+        ProjectMonitor? monitor = null;
+        try
+        {
+            monitor = new ProjectMonitor(rootPath);
+            monitor.ChangesDetected += OnProjectChanges;
+            monitor.MonitoringError += OnProjectMonitoringError;
+            _projectMonitor = monitor;
+            monitor.Start();
+            MonitorStatus = $"Monitoring {rootPath}. Changes are reported, not built or reloaded.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or NotSupportedException)
+        {
+            _projectMonitor = null;
+            monitor?.Dispose();
+            MonitorStatus = "Could not start monitoring: " + ex.Message + ". Inspect again to retry.";
+            _log.Warning("Monitoring", MonitorStatus);
+        }
+    }
+
+    private void StopProjectMonitor()
+    {
+        var monitor = _projectMonitor;
+        _projectMonitor = null;
+        if (monitor is null) return;
+        monitor.ChangesDetected -= OnProjectChanges;
+        monitor.MonitoringError -= OnProjectMonitoringError;
+        monitor.Dispose();
+    }
+
+    private void OnProjectChanges(object? sender, IReadOnlyList<ProjectChange> changes)
+    {
+        // The monitor raises batches on a worker thread; never parse project files on the UI thread.
+        if (sender is not ProjectMonitor monitor) return;
+        try
+        {
+            var refreshSequence = changes.Any(change => change.Category == ProjectChangeCategory.AboutMetadata)
+                ? Interlocked.Increment(ref _metadataRefreshSequence) : 0;
+            var rows = changes.Select(change => new ProjectChangeRow(change,
+                Path.GetExtension(change.RelativePath).Equals(".xml", StringComparison.OrdinalIgnoreCase)
+                    ? XmlFileValidator.Check(monitor.RootPath, change.RelativePath) : null)).ToArray();
+            var refreshed = refreshSequence != 0 ? ModProjectInspector.Inspect(monitor.RootPath) : null;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_disposed || !ReferenceEquals(sender, _projectMonitor)) return;
+                foreach (var row in rows)
+                {
+                    ProjectChanges.Insert(0, row);
+                    while (ProjectChanges.Count > 250) ProjectChanges.RemoveAt(ProjectChanges.Count - 1);
+                }
+                if (refreshed is not null && refreshSequence == Interlocked.Read(ref _metadataRefreshSequence))
+                    DisplayProjectInspection(refreshed);
+            });
+        }
+        catch (Exception ex)
+        {
+            OnProjectMonitoringError(sender, "Could not process a file-change batch: " + ex.Message);
+        }
+    }
+
+    private void OnProjectMonitoringError(object? sender, string message)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed || !ReferenceEquals(sender, _projectMonitor)) return;
+            StopProjectMonitor();
+            MonitorStatus = message + " Monitoring stopped; inspect again to retry.";
+            _log.Warning("Monitoring", MonitorStatus);
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        StopProjectMonitor();
+        _log.EntryWritten -= OnLogEntry;
+    }
+
+    public void ReportProjectPickerError(Exception exception)
+    {
+        ProjectSummary = "Could not open the folder picker: " + exception.Message;
+        _log.Warning("Projects", ProjectSummary);
     }
 
     public ObservableCollection<InstallationViewModel> Installations { get; }
@@ -231,7 +421,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 return $"RimPulse currently supports RimWorld 1.6 and 1.7. This installation reports {model.VersionDisplay}.";
             }
 
-            return "Installation verified. Project management arrives in milestone 2, runtime integration in milestone 4.";
+            return "Installation verified. Select a mod directory in the Mod project tab. Runtime integration is not yet implemented.";
         }
     }
 
@@ -272,6 +462,11 @@ public sealed class MainWindowViewModel : ObservableObject
             else
             {
                 _log.Warning("Configuration", loadResult.Message);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_configuration.SelectedProjectPath))
+            {
+                await InspectProjectAsync(_configuration.SelectedProjectPath, persist: false).ConfigureAwait(true);
             }
 
             StatusMessage = "Ready.";
