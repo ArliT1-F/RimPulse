@@ -49,12 +49,7 @@ public sealed class RotatingFileLogSink : IAppendOnlyLogSink, IDisposable
     {
         lock (_gate)
         {
-            _writer ??= new StreamWriter(
-                new FileStream(_filePath, FileMode.Append, FileAccess.Write, FileShare.Read),
-                _encoding)
-            {
-                AutoFlush = false,
-            };
+            _writer ??= OpenWriter();
 
             _writer.WriteLine(Format(entry));
             _writer.Flush();
@@ -94,6 +89,14 @@ public sealed class RotatingFileLogSink : IAppendOnlyLogSink, IDisposable
         return builder.ToString().TrimEnd('\r', '\n');
     }
 
+    private StreamWriter OpenWriter()
+        => new(
+            new FileStream(_filePath, FileMode.Append, FileAccess.Write, FileShare.Read),
+            _encoding)
+        {
+            AutoFlush = false,
+        };
+
     private void Rotate()
     {
         _writer?.Dispose();
@@ -120,5 +123,9 @@ public sealed class RotatingFileLogSink : IAppendOnlyLogSink, IDisposable
         {
             File.Move(_filePath, $"{_filePath}.1", overwrite: true);
         }
+
+        // Recreate the active log file immediately: a sink that silently leaves no current log file behind
+        // breaks `tail -f` and hides the fact that logging is still alive.
+        _writer = OpenWriter();
     }
 }

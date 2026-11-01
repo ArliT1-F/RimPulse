@@ -60,7 +60,9 @@ public sealed class GameVersionTests
     {
         Assert.Equal("1.6.4851 rev1248", GameVersion.Parse("1.6.4851 rev1248").ToString());
         Assert.Equal("1.7", GameVersion.Parse("1.7").ToString());
-        Assert.Equal("1.6.4851", GameVersion.Parse("1.6.4851").ShortVersion);
+        Assert.Equal("1.6", GameVersion.Parse("1.6.4851").ShortVersion);
+        Assert.Equal("4851", GameVersion.Parse("1.6.4851").Build);
+        Assert.Equal("1.6.4851", GameVersion.Parse("1.6.4851").ToString());
     }
 
     [Fact]
