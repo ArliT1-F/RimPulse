@@ -55,6 +55,29 @@ public sealed class MsBuildPropertiesTests
     }
 
     [Fact]
+    public void Evaluate_GlobalPropertiesOverrideProjectAssignments()
+    {
+        using var temp = new TempDirectory();
+        var project = temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <RimWorldDir>/wrong/install</RimWorldDir>
+                <SelectedInstallPath>$(RimWorldDir)</SelectedInstallPath>
+              </PropertyGroup>
+            </Project>
+            """);
+        var globals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["RimWorldDir"] = "/selected/install",
+        };
+
+        var properties = MsBuildPropertySet.Evaluate(project, globalProperties: globals);
+
+        Assert.Equal("/selected/install", properties.Get("RimWorldDir"));
+        Assert.Equal("/selected/install", properties.Get("SelectedInstallPath"));
+    }
+
+    [Fact]
     public void Evaluate_ReadsTheNearestDirectoryBuildProps()
     {
         using var temp = new TempDirectory();

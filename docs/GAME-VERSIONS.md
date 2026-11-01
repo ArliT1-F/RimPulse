@@ -105,8 +105,13 @@ compiler invocation.
   `System` itself, and mixing a `net10.0` framework into a `net472` compile would be wrong.
 - A `HintPath` is expanded before it is used: MSBuild properties from the project, the nearest
   `Directory.Build.props`, the props files it imports and the environment are evaluated first, and the
-  `Condition`s on properties, imports and items are evaluated too. This is what makes the usual mod project —
-  `<HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>` — work at all.
+  `Condition`s on properties, imports and items are evaluated too. The selected installation is also supplied
+  as immutable global properties (`RIMWORLD_DIR` / `RimWorldDir` and `RIMWORLD_MANAGED_DIR` /
+  `RimWorldManagedDir`), so a path copied from another machine still points at the game selected in RimPulse.
+  This is what makes the usual `<HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>` work.
+- SDK-style projects retain their implicit `.cs` source set even when they explicitly include linked sources;
+  `Compile` globs support `*`, `?`, recursive `**` path segments, relative directories, and semicolon-separated
+  specifications, along with `Exclude` and `Remove`.
 - If a declared hint path still points at a file that is not on this machine (another computer's install, a
   Windows path on Linux), the same file name is taken from the selected installation's managed folder and the
   substitution is reported, so one missing path does not become a wall of `CS0246` errors.

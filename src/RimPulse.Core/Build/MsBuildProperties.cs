@@ -19,9 +19,10 @@ namespace RimPulse.Core.Build;
 /// </para>
 /// <para>
 /// It follows MSBuild's evaluation order rather than guessing: the reserved and derived properties MSBuild
-/// provides, the environment, the nearest <c>Directory.Build.props</c>, then every <c>Import</c> and
-/// <c>PropertyGroup</c> in document order, each guarded by its <c>Condition</c> when that condition is one
-/// <see cref="MsBuildCondition"/> can evaluate. A property is expanded when it is defined, exactly as MSBuild
+/// provides, the environment, caller-supplied global properties, the nearest <c>Directory.Build.props</c>, then
+/// every <c>Import</c> and <c>PropertyGroup</c> in document order, each guarded by its <c>Condition</c> when that
+/// condition is one <see cref="MsBuildCondition"/> can evaluate. Global properties override environment values
+/// and cannot be reassigned by the project. Other properties are expanded when defined, exactly as MSBuild
 /// does, so a property may only use properties defined before it.
 /// </para>
 /// <para>
@@ -37,6 +38,7 @@ public sealed class MsBuildPropertySet
     private const string PropertyStart = "$(";
 
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _globalPropertyNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _evaluatedFiles = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _projectDirectory;
 
@@ -46,7 +48,10 @@ public sealed class MsBuildPropertySet
     /// Evaluates the properties in effect for <paramref name="projectFile"/>. Problems (an unreadable imported
     /// file, a condition RimPulse cannot evaluate) are added to <paramref name="problems"/> and never thrown.
     /// </summary>
-    public static MsBuildPropertySet Evaluate(string projectFile, List<string>? problems = null)
+    public static MsBuildPropertySet Evaluate(
+        string projectFile,
+        List<string>? problems = null,
+        IReadOnlyDictionary<string, string>? globalProperties = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectFile);
 
@@ -57,9 +62,10 @@ public sealed class MsBuildPropertySet
 
         set.SeedReservedProperties(path, directory);
         set.SeedEnvironment();
+        set.SeedGlobalProperties(globalProperties);
 
         // MSBuild imports the nearest Directory.Build.props before the project itself, so the project can
-        // override anything it sets.
+        // override anything it sets, except an explicitly supplied global property.
         if (FindNearestDirectoryBuildProps(directory) is { } shared)
         {
             set.EvaluateFile(shared, collected, 0);
@@ -237,8 +243,16 @@ public sealed class MsBuildPropertySet
                 continue;
             }
 
+            var name = property.Name.LocalName;
+            if (_globalPropertyNames.Contains(name))
+            {
+                // MSBuild global properties supplied by the caller (for example, the selected game's paths)
+                // cannot be overwritten by a project or one of its imports.
+                continue;
+            }
+
             // Expanded on assignment, like MSBuild: a property only sees the properties defined before it.
-            _values[property.Name.LocalName] = Expand(property.Value.Trim());
+            _values[name] = Expand(property.Value.Trim());
         }
     }
 
@@ -340,6 +354,29 @@ public sealed class MsBuildPropertySet
             {
                 _values.TryAdd(name, value);
             }
+        }
+    }
+
+    /// <summary>
+    /// Applies values supplied by the caller as MSBuild global properties. These override environment values
+    /// and are immutable for the rest of evaluation, matching properties passed to MSBuild on the command line.
+    /// </summary>
+    private void SeedGlobalProperties(IReadOnlyDictionary<string, string>? properties)
+    {
+        if (properties is null)
+        {
+            return;
+        }
+
+        foreach (var (name, value) in properties)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            _values[name] = value;
+            _globalPropertyNames.Add(name);
         }
     }
 

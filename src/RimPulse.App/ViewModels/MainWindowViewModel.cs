@@ -574,8 +574,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 var searchDirectories = installation.ManagedAssemblyDirectory is { Length: > 0 } managedDirectory
                     ? new[] { managedDirectory }
                     : Array.Empty<string>();
+                var buildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    // Treat the selected installation as authoritative even when the project was authored on
+                    // another machine or the process inherited a different RIMWORLD_DIR value.
+                    ["RIMWORLD_DIR"] = installation.RootPath,
+                    ["RimWorldDir"] = installation.RootPath,
+                };
 
-                var inputs = BuildInputDiscovery.Discover(inspection.RootPath, searchDirectories);
+                if (installation.ManagedAssemblyDirectory is { Length: > 0 } selectedManagedDirectory)
+                {
+                    buildProperties["RIMWORLD_MANAGED_DIR"] = selectedManagedDirectory;
+                    buildProperties["RimWorldManagedDir"] = selectedManagedDirectory;
+                }
+
+                var inputs = BuildInputDiscovery.Discover(inspection.RootPath, searchDirectories, buildProperties);
                 var build = inputs.HasUnits
                     ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
                     : null;
