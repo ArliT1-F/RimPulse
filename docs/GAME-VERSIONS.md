@@ -95,6 +95,11 @@ compiler invocation.
 
 ### Assembly reload (milestone 6) — the hard problem
 
+> Prior art to study before writing any reload code (both featured in the app's Credits panel):
+> [pardeike/Reloader](https://github.com/pardeike/Reloader) — developing and patching code while the game runs,
+> and [xiao-e-yun/RimWorldHotReload](https://github.com/xiao-e-yun/RimWorldHotReload) — mod-level hot reload.
+> They answer, from experience, which parts of the problem are actually tractable.
+
 **1.6 (Mono, .NET Framework 4.7.2):**
 
 - The CLR running RimWorld 1.6 cannot unload a non-collectible assembly. Loading a rebuilt
@@ -118,6 +123,13 @@ compiler invocation.
   collected after a swap — **must be verified experimentally**, not assumed.
 - Requires a real installation: inspect how 1.7 loads `Assemblies/*.dll`, whether an ALC is already used,
   and what the assembly resolution path is.
+
+### Remote control and IPC (milestones 4–5)
+
+[pardeike/RimBridgeServer](https://github.com/pardeike/RimBridgeServer) already runs an MCP server inside
+RimWorld to control and observe a running game, and the [RimWorldDevMCP ecosystem](https://github.com/search?q=RimWorldDevMCP&type=repositories)
+drives native developer actions from outside the process. Both are relevant to how RimPulse's companion mod
+should expose dev tools over IPC, and both are featured in the app's Credits panel.
 
 ### Testing environment (milestone 5)
 

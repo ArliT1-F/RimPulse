@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using Avalonia.Threading;
+using RimPulse.App.Services;
 using RimPulse.Core.Configuration;
+using RimPulse.Core.Credits;
 using RimPulse.Core.Diagnostics;
 using RimPulse.Core.Installations;
 
@@ -24,6 +26,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IDiagnosticLog _log;
     private readonly AppPaths _paths;
     private readonly string? _environmentRimWorldDirectory;
+    private readonly ILinkLauncher _linkLauncher;
 
     private RimPulseConfiguration _configuration = new();
     private InstallationViewModel? _selectedInstallation;
@@ -32,24 +35,34 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _isBusy;
     private bool _initialized;
     private bool _suppressSelectionPersistence;
+    private bool _isCreditsOpen;
+    private bool _isActivityLogVisible = true;
 
     public MainWindowViewModel(
         IRimWorldInstallationDetector detector,
         ConfigurationStore configurationStore,
         IDiagnosticLog log,
         AppPaths paths,
-        string? environmentRimWorldDirectory = null)
+        string? environmentRimWorldDirectory = null,
+        ILinkLauncher? linkLauncher = null)
     {
         _detector = detector ?? throw new ArgumentNullException(nameof(detector));
         _configurationStore = configurationStore ?? throw new ArgumentNullException(nameof(configurationStore));
         _log = log ?? NullDiagnosticLog.Instance;
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _environmentRimWorldDirectory = environmentRimWorldDirectory;
+        _linkLauncher = linkLauncher ?? new SystemLinkLauncher();
 
         Installations = new ObservableCollection<InstallationViewModel>();
         SelectedDetails = new ObservableCollection<DetailRow>();
         SelectedProblems = new ObservableCollection<ProblemRow>();
         ActivityLog = new ObservableCollection<LogEntry>();
+        Credits = new ObservableCollection<CreditEntryViewModel>();
+
+        foreach (var entry in CreditsCatalog.Entries)
+        {
+            Credits.Add(new CreditEntryViewModel(entry, _linkLauncher, ReportCreditsStatus));
+        }
 
         RescanCommand = new AsyncRelayCommand(() => RescanAsync(), () => !IsBusy, HandleCommandException);
         AddCustomPathCommand = new AsyncRelayCommand(
@@ -61,6 +74,9 @@ public sealed class MainWindowViewModel : ObservableObject
             () => !IsBusy && CanRemoveSelectedCustomPath,
             HandleCommandException);
 
+        ToggleCreditsCommand = new RelayCommand(() => IsCreditsOpen = !IsCreditsOpen);
+        ToggleActivityLogCommand = new RelayCommand(() => IsActivityLogVisible = !IsActivityLogVisible);
+
         _log.EntryWritten += OnLogEntry;
     }
 
@@ -71,6 +87,31 @@ public sealed class MainWindowViewModel : ObservableObject
     public ObservableCollection<ProblemRow> SelectedProblems { get; }
 
     public ObservableCollection<LogEntry> ActivityLog { get; }
+
+    /// <summary>Every third-party project and creator featured in this application.</summary>
+    public ObservableCollection<CreditEntryViewModel> Credits { get; }
+
+    public RelayCommand ToggleCreditsCommand { get; }
+
+    public RelayCommand ToggleActivityLogCommand { get; }
+
+    public string AttributionPolicy => CreditsCatalog.AttributionPolicy;
+
+    public string CreditsCountText => Credits.Count == 1
+        ? "1 referenced project"
+        : $"{Credits.Count} referenced projects";
+
+    public bool IsCreditsOpen
+    {
+        get => _isCreditsOpen;
+        set => SetProperty(ref _isCreditsOpen, value);
+    }
+
+    public bool IsActivityLogVisible
+    {
+        get => _isActivityLogVisible;
+        set => SetProperty(ref _isActivityLogVisible, value);
+    }
 
     public AsyncRelayCommand RescanCommand { get; }
 
@@ -479,6 +520,20 @@ public sealed class MainWindowViewModel : ObservableObject
         RescanCommand.RaiseCanExecuteChanged();
         AddCustomPathCommand.RaiseCanExecuteChanged();
         RemoveCustomPathCommand.RaiseCanExecuteChanged();
+    }
+
+    private void ReportCreditsStatus(string message)
+    {
+        StatusMessage = message;
+
+        if (message.StartsWith("Could not", StringComparison.Ordinal))
+        {
+            _log.Warning("Credits", message);
+        }
+        else
+        {
+            _log.Debug("Credits", message);
+        }
     }
 
     private void HandleCommandException(Exception exception)

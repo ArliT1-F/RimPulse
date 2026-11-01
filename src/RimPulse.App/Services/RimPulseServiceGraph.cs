@@ -72,7 +72,7 @@ public sealed class RimPulseServiceGraph : IDisposable
     }
 
     public MainWindowViewModel CreateMainWindowViewModel()
-        => new(Detector, ConfigurationStore, _log, Paths, EnvironmentRimWorldDirectory);
+        => new(Detector, ConfigurationStore, _log, Paths, EnvironmentRimWorldDirectory, new SystemLinkLauncher());
 
     public void Dispose()
     {

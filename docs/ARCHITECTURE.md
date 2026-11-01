@@ -62,7 +62,10 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | Installations | `VersionFileReader` | Reads `Version.txt` — the only authoritative version source |
 | Installations | `RimWorldInstallationDetector` | Collects candidates (manual, `RIMWORLD_DIR`, Steam, GOG), probes, de-duplicates, orders |
 | Installations | `ValveKeyValues`, `SteamLibraryReader` | Minimal VDF/ACF reader and Steam library discovery |
+| Credits | `CreditEntry`, `CreditsCatalog` | The compiled-in list of every referenced project and creator, with license, usage classification and milestone relevance. Asserted by tests, rendered by the app |
 | App | `RimPulseServiceGraph` | Composition root: builds paths, log, configuration store and detector; owns their lifetime |
+| App | `ILinkLauncher`, `SystemLinkLauncher` | Opens https links through the OS shell; refuses anything that is not an absolute http(s) URL |
+| App | `CreditEntryViewModel` | Owns the per-row link commands so the credits list needs no ancestor bindings |
 | App | `MainWindowViewModel` | Installaion list, selection, custom path entry, activity log mirror, status text |
 | App | `InstallationViewModel`, `DetailRow`, `ProblemRow` | Presentation projections of Core results |
 
@@ -131,13 +134,39 @@ library (the format subset needed is tiny).
 | D6 | Config and logs live in **XDG/AppData paths**, never inside the game or mod directory | RimPulse must not modify user data outside an explicit action |
 | D7 | Camera-ready `RimWorldInstallation` includes **problems**, not just success | The UI must be able to explain failures instead of showing an empty list |
 | D8 | Log buffer bounded **and** file rotation capped | Long development sessions must not grow memory or disk without limit |
+| D9 | Credits are a **compiled-in catalog in Core**, not documentation-only | The requirement is that every referenced creator/repository is featured *in the app*. A catalog in Core is testable (`CreditsCatalogTests` fails if an entry loses its creator, license or link) and cannot drift out of sync with the UI |
+| D10 | `CreditUsage` distinguishes Reference / Adapted / Bundled | Keeps the attribution promise honest: a project may be studied freely, but adopting code must change the classification and keep the author credited |
+| D11 | Link opening goes through `ILinkLauncher` | Keeps process launching out of view models and gives one place to validate URLs and report failures |
+
+## 8a. Credits and attribution
+
+`RimPulse.Core.Credits.CreditsCatalog` is the single source of truth for third-party references. It is
+rendered verbatim by the **Credits** panel in the main window, so documentation and application cannot
+disagree.
+
+Rules enforced by `CreditsCatalogTests`:
+
+- every entry has a creator, an `https://` link, a summary, a relevance note and a license statement;
+- the exact set of required references is present (removing one fails the build);
+- no project marked `Adapted` or `Bundled` may be unlicensed or GPL, because that would be an unreviewed
+  licensing decision (the two shipped/development dependencies, Avalonia (MIT) and xUnit.net (Apache-2.0),
+  satisfy this);
+- entries using GitHub search links must also link the specific repository they surface.
+
+Attribution policy (also shown in the app):
+
+> Every project RimPulse references or depends on is listed here with its creator and license. RimPulse adapts
+> no RimWorld tooling code in milestone 1. If code, data or assets from any referenced project are adapted, the
+> entry must be marked as adapted, the original author credited, and the original license honoured. Copyleft
+> (GPL) and unlicensed projects must not be copied into RimPulse without an explicit licensing decision.
 
 ## 9. Testing strategy
 
 - Everything in `RimPulse.Core` is covered by tests that run on any machine (no game required): version
   parsing, `Version.txt` reading, both installation layouts, missing-assembly reporting, Steam VDF parsing
   (modern and legacy), library/manifest reading, detection ordering and de-duplication, configuration
-  round-trip and corruption recovery, XDG/Windows/macOS path resolution, and the diagnostic log.
+  round-trip and corruption recovery, XDG/Windows/macOS path resolution, the diagnostic log, and the credits
+  catalog (completeness, attribution and licensing rules).
 - Tests use real temporary directories (`TempDirectory`) and real files — no mocking framework and no
   in-memory filesystem abstraction. This keeps the tested code on the same path as production code.
 - UI code is not unit tested (it is thin); the logic it depends on is in Core.

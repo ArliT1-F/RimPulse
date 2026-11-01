@@ -144,6 +144,7 @@ Honest accounting of how the current code has been verified. Update this section
 | Area | Status | How it was verified |
 | --- | --- | --- |
 | C# syntax of all sources | Verified | Every `.cs` file parsed with a C# grammar: 0 syntax errors |
+| Credits catalog completeness | Verified by inspection | Every referenced repository, organisation and creator has a catalog entry; encoded as a test |
 | XAML / MSBuild / solution files | Verified (well-formed) | All 10 XML documents parsed successfully |
 | `dotnet build` of the solution | **Not run** | The environment used to write milestone 1 had no .NET SDK and no NuGet access |
 | `dotnet test` of the suite | **Not run** | Same reason. The tests are written against real behaviour and must be executed by you (§2) |
@@ -154,7 +155,17 @@ Honest accounting of how the current code has been verified. Update this section
 If `dotnet build` fails on your machine, please report the exact compiler output — that is the fastest way
 to close the gap above.
 
-## 8. Code conventions
+## 8. Credits and attribution
+
+Referenced projects, their creators and RimPulse's own dependencies are listed in
+`RimPulse.Core.Credits.CreditsCatalog` and shown in the application's **Credits** panel. Adding a reference means adding a catalog entry — the panel is the
+authoritative list, and `CreditsCatalogTests` fails if an entry loses its creator, link, summary or license.
+
+When you consult a new project, add it there (and to the table in the README). When you actually adopt code
+from a project, change its `Usage` from `Reference` to `Adapted` in the same change, keep the author credited,
+and honour the license; GPL-3.0 and unlicensed code must not be copied in without a licensing decision.
+
+## 9. Code conventions
 
 - `RimPulse.Core` has no UI dependencies and no `static` mutable state; everything is injected.
 - Public types and non-obvious methods carry XML documentation; comments explain *why*, not *what*.
@@ -164,7 +175,7 @@ to close the gap above.
   implemented, it is absent and documented in [`docs/SPEC.md`](docs/SPEC.md)-driven milestone status.
 - New logic in Core requires tests. Tests use real temporary directories rather than a mocked filesystem.
 
-## 9. Next steps (milestone 2 and beyond)
+## 10. Next steps (milestone 2 and beyond)
 
 1. **Mod project management** — `IRimWorldProjectStore`, `About.xml` parsing (`packageId`, `name`, `author`,
    `supportedVersions`, `modDependencies`), `LoadFolders.xml` awareness for 1.6/1.7 content folders,

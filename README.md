@@ -45,6 +45,8 @@ working unless it is implemented and covered by a test.
 - Persists the selected installation and any custom paths (`config.json`) across sessions, tolerating a
   missing or corrupt configuration file.
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
+- Ships an in-app **Credits** panel that features every referenced project and creator with its license and
+  why it matters (see [Credits and references](#credits-and-references)).
 
 ### Deliberately not there yet
 
@@ -133,6 +135,37 @@ docs/
   GAME-VERSIONS.md        Verified RimWorld 1.6 vs 1.7 runtime differences and open questions
 DEVELOPMENT.md            Exact build / run / test / publish / troubleshooting commands
 ```
+
+## Credits and references
+
+RimPulse is built in conversation with the RimWorld modding community. The projects below were studied as
+reference for specific milestones; **every creator and repository is also featured inside the application**
+(header → **Credits**), which is the authoritative list. RimPulse adapts no RimWorld tooling code in milestone 1
+— those projects were studied as reference, and the license column exists so that any future adoption decision
+is informed. The two dependencies that RimPulse actually builds on are listed as well.
+
+| Project | Creator | License | Relevant to |
+| --- | --- | --- | --- |
+| [Reloader](https://github.com/pardeike/Reloader) | Andreas Pardeike | MIT | Hot reload prior art (milestone 6) |
+| [RimWorldHotReload](https://github.com/xiao-e-yun/RimWorldHotReload) | xiao-e-yun | BSD-3-Clause | Hot reload prior art (milestone 6) |
+| [RimBridgeServer](https://github.com/pardeike/RimBridgeServer) | Andreas Pardeike | MIT | In-game IPC / remote control (milestones 4–5) |
+| [RimWorldDevMCP](https://github.com/search?q=RimWorldDevMCP&type=repositories) | Jeffrharr | MIT | Driving native dev actions from outside the game (milestone 5) |
+| [RimTest Redux](https://github.com/search?q=RimTest+Redux&type=repositories) | ilyvion | Custom (see repo) | In-game automated checks that a reload really happened |
+| [Rimworld-Pickle](https://github.com/RimWorks/Rimworld-Pickle) | RimWorks | MIT | Live-session testing (milestones 5–6) |
+| [pickle-template](https://github.com/RimWorks/pickle-template) | RimWorks | MIT | Well-structured mod projects to inspect (milestones 2–3) |
+| [rimworld-logging-framework](https://github.com/RimWorks/rimworld-logging-framework) | RimWorks | MIT | Structured diagnostics for the companion mod |
+| [steam-game-image-action](https://github.com/RimWorks/steam-game-image-action) | RimWorks | MIT | Testing against a real install in CI |
+| [semantic-release-steam](https://github.com/RimWorks/semantic-release-steam) | RimWorks | MIT | Workshop release automation (milestone 7) |
+| [RimWorks (organisation)](https://github.com/RimWorks) | RimWorks | Mixed, mostly MIT | Engineering-first mod tooling |
+| [RimSort](https://github.com/RimSort/RimSort) | RimSort contributors | GPL-3.0 | Mod metadata and load-order handling (reference only) |
+| [RimworldXsd](https://github.com/Ragonfana/RimworldXsd) | Ragonfana | No license declared | XML validation (reference only) |
+| [Avalonia](https://github.com/AvaloniaUI/Avalonia) | Avalonia Team | MIT | **Shipped dependency** — the desktop UI framework |
+| [xUnit.net](https://github.com/xunit/xunit) | xUnit.net contributors | Apache-2.0 | **Development dependency** — runs the test suite, not shipped |
+
+**Attribution policy.** If code, data or assets from any of these projects are ever adapted, the credit entry
+must be marked as adapted rather than reference, the original author must remain credited in the application,
+and the original license must be honoured. Copyleft (GPL-3.0) and unlicensed projects must not be copied into
+RimPulse without an explicit licensing decision.
 
 ## Documentation
 
