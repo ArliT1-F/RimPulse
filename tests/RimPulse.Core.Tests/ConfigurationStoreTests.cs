@@ -13,7 +13,7 @@ public sealed class ConfigurationStoreTests
         using var temp = new TempDirectory();
         var store = new ConfigurationStore(temp.Combine("config.json"), new DiagnosticLog());
 
-        var result = await store.LoadAsync();
+        var result = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ConfigurationLoadStatus.DefaultsCreated, result.Status);
         Assert.True(result.Configuration.AutoDetectOnStartup);
@@ -35,8 +35,8 @@ public sealed class ConfigurationStoreTests
             CustomInstallationPaths = ["/games/RimWorld", "/games/RimWorld17"],
         };
 
-        await store.SaveAsync(configuration);
-        var result = await store.LoadAsync();
+        await store.SaveAsync(configuration, TestContext.Current.CancellationToken);
+        var result = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ConfigurationLoadStatus.Loaded, result.Status);
         Assert.Equal("/games/RimWorld", result.Configuration.SelectedInstallationPath);
@@ -52,9 +52,9 @@ public sealed class ConfigurationStoreTests
         var path = temp.Combine("config.json");
         var store = new ConfigurationStore(path, new DiagnosticLog());
 
-        await store.SaveAsync(new RimPulseConfiguration { SelectedInstallationPath = "/games/RimWorld" });
+        await store.SaveAsync(new RimPulseConfiguration { SelectedInstallationPath = "/games/RimWorld" }, TestContext.Current.CancellationToken);
 
-        var json = await File.ReadAllTextAsync(path);
+        var json = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
         Assert.Contains("\"selectedInstallationPath\"", json, StringComparison.Ordinal);
         Assert.False(File.Exists(path + ".tmp"));
     }
@@ -66,7 +66,7 @@ public sealed class ConfigurationStoreTests
         var path = temp.CreateFile("config.json", "{ this is not json ");
         var store = new ConfigurationStore(path, new DiagnosticLog());
 
-        var result = await store.LoadAsync();
+        var result = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ConfigurationLoadStatus.RecoveredFromCorruptFile, result.Status);
         Assert.False(File.Exists(path));
@@ -90,7 +90,7 @@ public sealed class ConfigurationStoreTests
             """);
 
         var store = new ConfigurationStore(temp.Combine("config.json"), new DiagnosticLog());
-        var result = await store.LoadAsync();
+        var result = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ConfigurationLoadStatus.Loaded, result.Status);
         Assert.Equal("/games/RimWorld", result.Configuration.SelectedInstallationPath);
@@ -106,7 +106,7 @@ public sealed class ConfigurationStoreTests
         temp.CreateFile("config.json", string.Empty);
         var store = new ConfigurationStore(temp.Combine("config.json"), new DiagnosticLog());
 
-        var result = await store.LoadAsync();
+        var result = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(ConfigurationLoadStatus.DefaultsUsedAfterError, result.Status);
     }
@@ -117,7 +117,7 @@ public sealed class ConfigurationStoreTests
         using var temp = new TempDirectory();
         var store = new ConfigurationStore(temp.Combine("nested", "deeper", "config.json"), new DiagnosticLog());
 
-        await store.SaveAsync(new RimPulseConfiguration());
+        await store.SaveAsync(new RimPulseConfiguration(), TestContext.Current.CancellationToken);
 
         Assert.True(File.Exists(temp.Combine("nested", "deeper", "config.json")));
     }

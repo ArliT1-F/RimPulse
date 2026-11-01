@@ -169,7 +169,7 @@ public sealed class InstallationDetectorTests
         var installRoot = FakeInstallation.CreateUnity(temp.CreateDirectory("RimWorld"));
 
         var detector = new RimWorldInstallationDetector(CreateOptions(temp), new DiagnosticLog());
-        var installations = await detector.DetectAsync([installRoot]);
+        var installations = await detector.DetectAsync([installRoot], TestContext.Current.CancellationToken);
 
         Assert.Single(installations);
         Assert.Equal(Path.GetFullPath(installRoot), installations[0].RootPath);

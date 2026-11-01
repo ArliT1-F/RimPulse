@@ -18,10 +18,39 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore
-        run: dotnet restore RimPulse.slnx
+        shell: bash
+        run: dotnet restore RimPulse.slnx 2>&1 | tee restore.log
 
       - name: Build
-        run: dotnet build RimPulse.slnx -c Release --no-restore
+        shell: bash
+        run: dotnet build RimPulse.slnx -c Release --no-restore 2>&1 | tee build.log
 
       - name: Test
-        run: dotnet test RimPulse.slnx -c Release
+        shell: bash
+        run: dotnet test RimPulse.slnx -c Release --no-build 2>&1 | tee test.log
+
+      # Diagnostics are surfaced as check-run annotations and a step summary so failures are visible
+      # without downloading the raw job log.
+      - name: Report failures
+        if: failure()
+        shell: bash
+        run: |
+          for log in restore.log build.log test.log; do
+            [ -f "$log" ] || continue
+
+            matches=$(grep -nE '(: |^)(error [A-Z]+[0-9]+|\[FAIL\]|Failed!)' "$log" | head -40)
+
+            {
+              echo "### $log"
+              echo '```'
+              if [ -n "$matches" ]; then echo "$matches"; else echo "(no matching error lines)"; tail -40 "$log"; fi
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            if [ -n "$matches" ]; then
+              while IFS= read -r line; do
+                echo "::error::$line"
+              done <<< "$matches"
+            fi
+          done
+          exit 0
