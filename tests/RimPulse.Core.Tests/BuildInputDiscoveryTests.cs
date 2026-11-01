@@ -37,7 +37,7 @@ public sealed class BuildInputDiscoveryTests
         Assert.False(unit.NullableEnabled);
         Assert.Equal(new[] { "DEBUG", "CUSTOM" }, unit.DefineConstants);
         Assert.Equal(2, unit.SourceFiles.Count);
-        Assert.All(unit.SourceFiles, file => Assert.False(file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")));
+        Assert.All(unit.SourceFiles, file => Assert.DoesNotContain($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", file, StringComparison.Ordinal));
     }
 
     [Fact]

@@ -359,7 +359,10 @@ public static class BuildInputDiscovery
     {
         try
         {
-            var combined = Path.IsPathRooted(path) ? path : Path.Combine(directory, path);
+            // MSBuild files use '\' as the separator on every platform, so a verbatim HintPath or
+            // ProjectReference would otherwise be a single, nonexistent file name on Linux and macOS.
+            var normalized = path.Trim().Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            var combined = Path.IsPathRooted(normalized) ? normalized : Path.Combine(directory, normalized);
             return Path.GetFullPath(combined);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)

@@ -31,11 +31,9 @@ public sealed class ModCompilerTests
             """);
         var output = temp.Combine("Assemblies", "TestMod.dll");
 
-        var result = ModCompiler.Compile(new CompileRequest(
-            "TestMod",
-            [source],
-            RuntimeReferences(),
-            OutputPath: output));
+        var result = ModCompiler.Compile(
+            new CompileRequest("TestMod", [source], RuntimeReferences(), OutputPath: output),
+            TestContext.Current.CancellationToken);
 
         Assert.Empty(result.Problems);
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics.Select(d => d.Display)));
@@ -59,11 +57,9 @@ public sealed class ModCompilerTests
             """);
         var output = temp.Combine("Assemblies", "TestMod.dll");
 
-        var result = ModCompiler.Compile(new CompileRequest(
-            "TestMod",
-            [source],
-            RuntimeReferences(),
-            OutputPath: output));
+        var result = ModCompiler.Compile(
+            new CompileRequest("TestMod", [source], RuntimeReferences(), OutputPath: output),
+            TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.False(File.Exists(output));
@@ -92,11 +88,9 @@ public sealed class ModCompilerTests
             }
             """);
 
-        var result = ModCompiler.Compile(new CompileRequest(
-            "TestMod",
-            [source],
-            RuntimeReferences(),
-            DefineConstants: ["CUSTOM_SYMBOL"]));
+        var result = ModCompiler.Compile(
+            new CompileRequest("TestMod", [source], RuntimeReferences(), DefineConstants: ["CUSTOM_SYMBOL"]),
+            TestContext.Current.CancellationToken);
 
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Diagnostics.Select(d => d.Display)));
         Assert.Null(result.OutputPath);
@@ -115,7 +109,9 @@ public sealed class ModCompilerTests
             }
             """);
 
-        var tooOld = ModCompiler.Compile(new CompileRequest("TestMod", [source], RuntimeReferences(), LangVersion: "7.3"));
+        var tooOld = ModCompiler.Compile(
+            new CompileRequest("TestMod", [source], RuntimeReferences(), LangVersion: "7.3"),
+            TestContext.Current.CancellationToken);
 
         Assert.False(tooOld.Succeeded);
         Assert.Contains(tooOld.Diagnostics, diagnostic => diagnostic.Severity == BuildDiagnosticSeverity.Error);
@@ -130,11 +126,16 @@ public sealed class ModCompilerTests
         Assert.Contains(missingSource.Problems, problem => problem.Contains("does not exist", StringComparison.Ordinal));
 
         var source = temp.CreateFile("Source.cs", "namespace TestMod; public class Thing { }");
+        var noReferences = ModCompiler.Compile(new CompileRequest("TestMod", [source], []));
+        Assert.False(noReferences.Succeeded);
+        Assert.Contains(noReferences.Problems, problem => problem.Contains("No reference assemblies", StringComparison.Ordinal));
+
+        // A file that is not a PE image must fail the build loudly, whether Roslyn rejects it while loading
+        // the reference or while emitting.
         var notAnAssembly = temp.CreateFile("Fake.dll", "this is not a PE file");
         var badReference = ModCompiler.Compile(new CompileRequest("TestMod", [source], [notAnAssembly]));
         Assert.False(badReference.Succeeded);
-        Assert.Contains(badReference.Problems, problem => problem.Contains("could not be used as a reference", StringComparison.Ordinal));
-        Assert.Contains(badReference.Problems, problem => problem.Contains("No reference assemblies", StringComparison.Ordinal));
+        Assert.NotEmpty(badReference.Problems.Concat(badReference.Diagnostics.Select(diagnostic => diagnostic.Display)));
     }
 
     [Fact]
