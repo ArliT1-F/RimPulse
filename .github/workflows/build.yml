@@ -7,6 +7,8 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -29,28 +31,34 @@ jobs:
         shell: bash
         run: dotnet test RimPulse.slnx -c Release --no-build 2>&1 | tee test.log
 
-      # Diagnostics are surfaced as check-run annotations and a step summary so failures are visible
-      # without downloading the raw job log.
+      # Diagnostics are published as a commit comment because job logs and artifacts are not reachable
+      # from every environment that needs to read them.
       - name: Report failures
         if: failure()
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          for log in restore.log build.log test.log; do
-            [ -f "$log" ] || continue
-
-            matches=$(grep -nE '(: |^)(error [A-Z]+[0-9]+|\[FAIL\]|Failed!)' "$log" | head -40)
-
-            {
-              echo "### $log"
+          report=$(mktemp)
+          {
+            echo "## CI failure report"
+            echo
+            echo "Commit: \`${GITHUB_SHA}\`"
+            echo
+            for log in restore.log build.log test.log; do
+              [ -f "$log" ] || continue
+              echo "### $log (last 150 lines)"
+              echo '```text'
+              tail -150 "$log"
               echo '```'
-              if [ -n "$matches" ]; then echo "$matches"; else echo "(no matching error lines)"; tail -40 "$log"; fi
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+              echo
+            done
+          } > "$report"
 
-            if [ -n "$matches" ]; then
-              while IFS= read -r line; do
-                echo "::error::$line"
-              done <<< "$matches"
-            fi
+          jq -Rs '{body: .}' "$report" > payload.json
+          gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" --input payload.json > /dev/null || true
+
+          grep -nE 'error [A-Z]+[0-9]+|\[FAIL\]|Failed!|Process completed' "$report" | head -10 | while IFS= read -r line; do
+            echo "::error::$line"
           done
           exit 0
