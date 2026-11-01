@@ -84,7 +84,7 @@ public sealed class AssemblyInspectorTests
         var inspection = AssemblyInspector.Inspect(temp.Combine("missing.dll"));
 
         Assert.Contains(inspection.Problems, problem => problem.Contains("does not exist", StringComparison.Ordinal));
-        Assert.Equal("The assembly could not be read.", inspection.Summary);
+        Assert.Contains("does not exist", inspection.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
