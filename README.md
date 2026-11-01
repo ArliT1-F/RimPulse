@@ -265,7 +265,7 @@ Honesty matters more than a green checkmark. Current state, on Ubuntu with the .
 | Check | Result |
 | --- | --- |
 | `dotnet build RimPulse.slnx -c Release` | **Passes in CI** (GitHub Actions, Ubuntu, .NET 10) with warnings as the compiler sees them; no warnings in the last run |
-| `dotnet test RimPulse.slnx -c Release` | **Passes in CI** — the full suite, including the project, `LoadFolders`, build-input, reference-resolution and Roslyn compiler tests |
+| `dotnet test RimPulse.slnx -c Release` | **Passes in CI** — 177 tests, including the project, `LoadFolders`, build-input, reference-resolution, Roslyn compiler and assembly-inspection tests |
 | The desktop window on a real desktop | **Verified locally for the previous milestone** — the app started, detected an installation and inspected a mod directory on Linux. The new project list and build panel have not been run on a desktop yet |
 | Detection against a real RimWorld installation | **Partially verified** — a scan on the author's machine reported one installation; whether its version was confirmed was not recorded |
 | Building a real mod against a real installation | **Not verified** — the compiler is exercised in CI against the test runtime's assemblies, not against game assemblies from a real install |

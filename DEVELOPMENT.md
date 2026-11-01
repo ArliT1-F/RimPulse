@@ -146,7 +146,7 @@ Honest accounting of how the current code has been verified. Update this section
 | C# syntax of all sources | Verified | `dotnet build` passes in CI on every push |
 | XAML / MSBuild / solution files | Verified | The app, including the project list and build panel AXAML, compiles in CI (compiled bindings turn binding typos into build errors) |
 | `dotnet build` of the solution | Verified | GitHub Actions, Release configuration |
-| `dotnet test` of the suite | Verified | GitHub Actions, Release configuration; includes the `LoadFolders`, build-input, reference-resolution and Roslyn compiler tests |
+| `dotnet test` of the suite | Verified | GitHub Actions, Release configuration, 177 tests; includes the `LoadFolders`, build-input, reference-resolution, Roslyn compiler and assembly-inspection tests |
 | Credits catalog completeness | Verified | Encoded as tests (`CreditsCatalogTests`) and re-checked on every push |
 | Opening the desktop window | Verified for the previous milestone | Run on Linux with a real desktop session; the new project list and build panel need the same treatment |
 | Building a mod against a real installation | **Not verified** | The compiler is tested against the test runtime's assemblies; a build against real 1.6/1.7 game assemblies has not been run |
