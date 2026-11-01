@@ -32,9 +32,17 @@ public sealed class ModBuilderTests
     {
         Directory.CreateDirectory(directory);
 
+        // An assembly name such as "Assembly-CSharp" is not a legal C# namespace; the fixture only needs a real
+        // assembly with that file name, so the namespace is sanitised.
+        var identifier = new string(assemblyName.Select(character => char.IsLetterOrDigit(character) ? character : '_').ToArray());
+        if (identifier.Length == 0 || char.IsAsciiDigit(identifier[0]))
+        {
+            identifier = "_" + identifier;
+        }
+
         var source = temp.CreateFile(
             $"libsrc/{assemblyName}/{assemblyName}.cs",
-            $"namespace {assemblyName}; public static class Marker {{ public const int Value = 1; }}");
+            $"namespace {identifier}; public static class Marker {{ public const int Value = 1; }}");
         var output = Path.Combine(directory, $"{assemblyName}.dll");
 
         var result = ModCompiler.Compile(

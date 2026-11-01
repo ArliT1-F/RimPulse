@@ -65,7 +65,7 @@ public sealed class BuildLogReportTests
         Assert.Contains("Assembly-CSharp.dll, UnityEngine.CoreModule.dll", detail, StringComparison.Ordinal);
         Assert.Contains("Errors: 2", detail, StringComparison.Ordinal);
         Assert.Contains("Patch.cs:12:5 error CS0246", detail, StringComparison.Ordinal);
-        Assert.Contains("Error codes: CS0246 ×1, CS0103 ×1", detail, StringComparison.Ordinal);
+        Assert.Contains("Error codes: CS0103 ×1, CS0246 ×1", detail, StringComparison.Ordinal);
         Assert.Contains("Hint: CS0246", detail, StringComparison.Ordinal);
     }
 
