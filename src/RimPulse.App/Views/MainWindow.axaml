@@ -32,15 +32,15 @@
                       CornerRadius="5"
                       Padding="7,2"
                       VerticalAlignment="Center">
-                <TextBlock Text="RIMPULSE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+                <SelectableTextBlock Text="RIMPULSE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
               </Border>
-              <TextBlock Text="Build. Reload. Test. Repeat." Classes="caption" VerticalAlignment="Center" />
+              <SelectableTextBlock Text="Build. Reload. Test. Repeat." Classes="caption" VerticalAlignment="Center" />
             </StackPanel>
-            <TextBlock Text="RimWorld development environment" Classes="h1" />
+            <SelectableTextBlock Text="RimWorld development environment" Classes="h1" />
           </StackPanel>
 
           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-            <TextBlock Text="{Binding StatusMessage}"
+            <SelectableTextBlock Text="{Binding StatusMessage}"
                        Classes="caption"
                        MaxWidth="360"
                        TextWrapping="Wrap"
@@ -62,8 +62,8 @@
         <Border Classes="panel">
           <Grid RowDefinitions="Auto,Auto,*,Auto">
             <Grid ColumnDefinitions="*,Auto">
-              <TextBlock Text="RIMWORLD INSTALLATIONS" Classes="section" />
-              <TextBlock Grid.Column="1" Text="{Binding InstallationCountText}" Classes="caption" />
+              <SelectableTextBlock Text="RIMWORLD INSTALLATIONS" Classes="section" />
+              <SelectableTextBlock Grid.Column="1" Text="{Binding InstallationCountText}" Classes="caption" />
             </Grid>
 
             <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
@@ -86,12 +86,12 @@
                   <DataTemplate x:DataType="vm:InstallationViewModel">
                     <Grid ColumnDefinitions="*,Auto">
                       <StackPanel Spacing="3">
-                        <TextBlock Text="{Binding Title}"
+                        <SelectableTextBlock Text="{Binding Title}"
                                    FontSize="13"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <TextBlock Text="{Binding Summary}" Classes="caption" />
-                        <TextBlock Text="{Binding PathText}"
+                        <SelectableTextBlock Text="{Binding Summary}" Classes="caption" />
+                        <SelectableTextBlock Text="{Binding PathText}"
                                    Classes="caption mono"
                                    TextTrimming="CharacterEllipsis"
                                    MaxWidth="330"
@@ -105,7 +105,7 @@
                               Margin="8,2,0,0"
                               Background="{DynamicResource AccentQuietBrush}"
                               IsVisible="{Binding IsReady}">
-                        <TextBlock Text="Ready" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+                        <SelectableTextBlock Text="Ready" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
                       </Border>
 
                       <Border Grid.Column="1"
@@ -115,7 +115,7 @@
                               Margin="8,2,0,0"
                               Background="{DynamicResource WarningQuietBrush}"
                               IsVisible="{Binding IsUnsupported}">
-                        <TextBlock Text="UNSUPPORTED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" />
+                        <SelectableTextBlock Text="UNSUPPORTED" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" />
                       </Border>
 
                       <Border Grid.Column="1"
@@ -125,14 +125,14 @@
                               Margin="8,2,0,0"
                               Background="{DynamicResource DangerQuietBrush}"
                               IsVisible="{Binding IsIncomplete}">
-                        <TextBlock Text="INCOMPLETE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
+                        <SelectableTextBlock Text="INCOMPLETE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
                       </Border>
                     </Grid>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
 
-              <TextBlock IsVisible="{Binding HasNoInstallations}"
+              <SelectableTextBlock IsVisible="{Binding HasNoInstallations}"
                          Classes="caption"
                          TextWrapping="Wrap"
                          Margin="2,6,2,0"
@@ -140,7 +140,7 @@
                          Text="Nothing detected yet. RimPulse searches Steam libraries, GOG folders and the RIMWORLD_DIR environment variable. Add a path above to point at a specific installation." />
             </Grid>
 
-            <TextBlock Grid.Row="3"
+            <SelectableTextBlock Grid.Row="3"
                        IsVisible="{Binding HasEnvironmentOverride}"
                        Classes="caption"
                        TextWrapping="Wrap"
@@ -155,33 +155,33 @@
 
             <StackPanel Spacing="5">
               <StackPanel Orientation="Horizontal" Spacing="10">
-                <TextBlock Text="{Binding SelectedTitle}" Classes="h1" VerticalAlignment="Center" />
+                <SelectableTextBlock Text="{Binding SelectedTitle}" Classes="h1" VerticalAlignment="Center" />
 
                 <Border CornerRadius="9" Padding="8,2" VerticalAlignment="Center"
                         Background="{DynamicResource AccentQuietBrush}" IsVisible="{Binding SelectedIsReady}">
-                  <TextBlock Text="Ready" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+                  <SelectableTextBlock Text="Ready" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
                 </Border>
 
                 <Border CornerRadius="9" Padding="8,2" VerticalAlignment="Center"
                         Background="{DynamicResource WarningQuietBrush}" IsVisible="{Binding SelectedIsUnsupported}">
-                  <TextBlock Text="UNSUPPORTED VERSION" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" />
+                  <SelectableTextBlock Text="UNSUPPORTED VERSION" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" />
                 </Border>
 
                 <Border CornerRadius="9" Padding="8,2" VerticalAlignment="Center"
                         Background="{DynamicResource DangerQuietBrush}" IsVisible="{Binding SelectedIsIncomplete}">
-                  <TextBlock Text="INCOMPLETE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
+                  <SelectableTextBlock Text="INCOMPLETE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
                 </Border>
               </StackPanel>
 
-              <TextBlock Text="{Binding SelectedSubtitle}" Classes="caption" TextWrapping="Wrap" />
+              <SelectableTextBlock Text="{Binding SelectedSubtitle}" Classes="caption" TextWrapping="Wrap" />
             </StackPanel>
 
             <ItemsControl Grid.Row="1" ItemsSource="{Binding SelectedDetails}" Margin="0,20,0,0">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:DetailRow">
                   <Grid ColumnDefinitions="180,*" Margin="0,4">
-                    <TextBlock Text="{Binding Label}" Classes="caption" VerticalAlignment="Top" />
-                    <TextBlock Grid.Column="1"
+                    <SelectableTextBlock Text="{Binding Label}" Classes="caption" VerticalAlignment="Top" />
+                    <SelectableTextBlock Grid.Column="1"
                                Text="{Binding Value}"
                                Classes="body mono"
                                TextWrapping="Wrap" />
@@ -191,11 +191,11 @@
             </ItemsControl>
 
             <StackPanel Grid.Row="2" Spacing="8" Margin="0,20,0,0" IsVisible="{Binding SelectedHasProblems}">
-              <TextBlock Text="PROBLEMS DETECTED" Classes="section" />
+              <SelectableTextBlock Text="PROBLEMS DETECTED" Classes="section" />
               <ItemsControl ItemsSource="{Binding SelectedProblems}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:ProblemRow">
-                    <TextBlock Text="{Binding Text}"
+                    <SelectableTextBlock Text="{Binding Text}"
                                FontSize="12"
                                Foreground="{DynamicResource WarningBrush}"
                                TextWrapping="Wrap"
@@ -206,7 +206,7 @@
             </StackPanel>
 
             <StackPanel Grid.Row="4" Spacing="10" Margin="0,20,0,0">
-              <TextBlock Text="{Binding SelectionNote}" Classes="caption" TextWrapping="Wrap" />
+              <SelectableTextBlock Text="{Binding SelectionNote}" Classes="caption" TextWrapping="Wrap" />
               <Button Content="Remove path from list"
                       Classes="quiet"
                       HorizontalAlignment="Left"
@@ -220,8 +220,8 @@
           <Border Classes="panel" Margin="0,12,0,0">
             <Grid RowDefinitions="Auto,*">
               <StackPanel Spacing="5">
-                <TextBlock Text="MOD PROJECT" Classes="section" />
-                <TextBlock Text="Select an existing mod root. RimPulse reads it without modifying files." Classes="caption" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="MOD PROJECT" Classes="section" />
+                <SelectableTextBlock Text="Select an existing mod root. RimPulse reads it without modifying files." Classes="caption" TextWrapping="Wrap" />
               </StackPanel>
               <Grid Grid.Row="1" ColumnDefinitions="340,*" Margin="0,14,0,0">
 
@@ -236,8 +236,8 @@
 
                   <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="0,16,0,0">
                     <Grid ColumnDefinitions="*,Auto">
-                      <TextBlock Text="SAVED PROJECTS" Classes="section" />
-                      <TextBlock Grid.Column="1" Text="{Binding ProjectCountText}" Classes="caption" />
+                      <SelectableTextBlock Text="SAVED PROJECTS" Classes="section" />
+                      <SelectableTextBlock Grid.Column="1" Text="{Binding ProjectCountText}" Classes="caption" />
                     </Grid>
                     <ListBox Grid.Row="1"
                              Margin="0,8,0,0"
@@ -250,11 +250,11 @@
                         <DataTemplate x:DataType="vm:ProjectRow">
                           <Grid ColumnDefinitions="*,Auto">
                             <StackPanel Spacing="2">
-                              <TextBlock Text="{Binding Title}"
+                              <SelectableTextBlock Text="{Binding Title}"
                                          FontSize="13"
                                          FontWeight="SemiBold"
                                          Foreground="{DynamicResource TextPrimaryBrush}" />
-                              <TextBlock Text="{Binding Detail}"
+                              <SelectableTextBlock Text="{Binding Detail}"
                                          Classes="caption mono"
                                          TextTrimming="CharacterEllipsis"
                                          MaxWidth="240"
@@ -267,13 +267,13 @@
                                     Margin="6,2,0,0"
                                     Background="{DynamicResource DangerQuietBrush}"
                                     IsVisible="{Binding IsMissing}">
-                              <TextBlock Text="{Binding MissingLabel}" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
+                              <SelectableTextBlock Text="{Binding MissingLabel}" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource DangerBrush}" />
                             </Border>
                           </Grid>
                         </DataTemplate>
                       </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Grid.Row="1"
+                    <SelectableTextBlock Grid.Row="1"
                                IsVisible="{Binding HasNoProjects}"
                                Classes="caption"
                                TextWrapping="Wrap"
@@ -291,13 +291,13 @@
 
                 <ScrollViewer Grid.Column="1" Margin="20,0,0,0" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="14">
-                  <TextBlock Text="{Binding ProjectSummary}" Classes="caption" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="{Binding ProjectSummary}" Classes="caption" TextWrapping="Wrap" />
                   <ItemsControl ItemsSource="{Binding ProjectDetails}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:DetailRow">
                         <Grid ColumnDefinitions="180,*" Margin="0,4">
-                          <TextBlock Text="{Binding Label}" Classes="caption" />
-                          <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="body mono" TextWrapping="Wrap" />
+                          <SelectableTextBlock Text="{Binding Label}" Classes="caption" />
+                          <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" Classes="body mono" TextWrapping="Wrap" />
                         </Grid>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -305,27 +305,36 @@
                   <ItemsControl ItemsSource="{Binding ProjectProblems}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:ProblemRow">
-                        <TextBlock Text="{Binding Text}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,2" />
+                        <SelectableTextBlock Text="{Binding Text}" Foreground="{DynamicResource WarningBrush}" TextWrapping="Wrap" Margin="0,2" />
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <TextBlock Text="BUILD" Classes="section" Margin="0,8,0,0" />
-                  <TextBlock Text="{Binding BuildTargetText}" Classes="caption" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="BUILD" Classes="section" Margin="0,8,0,0" />
+                  <SelectableTextBlock Text="{Binding BuildTargetText}" Classes="caption" TextWrapping="Wrap" />
                   <StackPanel Orientation="Horizontal" Spacing="10">
                     <Button Content="Build mod" Classes="accent" Command="{Binding BuildProjectCommand}" />
-                    <TextBlock Text="{Binding BuildStatus}"
+                    <Button Content="Copy all errors"
+                            Classes="quiet"
+                            IsVisible="{Binding HasBuildDiagnostics}"
+                            Command="{Binding CopyBuildDiagnosticsCommand}" />
+                    <SelectableTextBlock Text="{Binding BuildStatus}"
                                Classes="caption"
                                TextWrapping="Wrap"
                                VerticalAlignment="Center"
                                MaxWidth="520"
                                HorizontalAlignment="Left" />
                   </StackPanel>
+                  <SelectableTextBlock Text="{Binding BuildCopyNotice}"
+                                       Classes="caption"
+                                       IsVisible="{Binding HasBuildCopyNotice}"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource AccentBrush}" />
                   <ItemsControl ItemsSource="{Binding BuildDetails}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:DetailRow">
                         <Grid ColumnDefinitions="180,*" Margin="0,3">
-                          <TextBlock Text="{Binding Label}" Classes="caption" VerticalAlignment="Top" />
-                          <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="caption mono" TextWrapping="Wrap" />
+                          <SelectableTextBlock Text="{Binding Label}" Classes="caption" VerticalAlignment="Top" />
+                          <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" Classes="caption mono" TextWrapping="Wrap" />
                         </Grid>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -333,27 +342,27 @@
                   <ItemsControl ItemsSource="{Binding BuildDiagnostics}" IsVisible="{Binding HasBuildDiagnostics}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:BuildDiagnosticRow">
-                        <TextBlock Text="{Binding Display}"
+                        <SelectableTextBlock Text="{Binding Display}"
                                    Classes="caption mono"
                                    TextWrapping="Wrap"
                                    Margin="0,2" />
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <TextBlock Text="Compiles the mod's C# projects against the selected installation's assemblies. XML is validated for syntax only; nothing is reloaded into a running game yet." Classes="caption" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="Compiles the mod's C# projects against the selected installation's assemblies. XML is validated for syntax only; nothing is reloaded into a running game yet." Classes="caption" TextWrapping="Wrap" />
 
-                  <TextBlock Text="FILE MONITOR" Classes="section" Margin="0,8,0,0" />
-                  <TextBlock Text="{Binding MonitorStatus}" Classes="caption" TextWrapping="Wrap" />
-                  <TextBlock Text="Recent changes (latest 250). XML syntax is checked only; no build or reload is performed." Classes="caption" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="FILE MONITOR" Classes="section" Margin="0,8,0,0" />
+                  <SelectableTextBlock Text="{Binding MonitorStatus}" Classes="caption" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="Recent changes (latest 250). XML syntax is checked only; no build or reload is performed." Classes="caption" TextWrapping="Wrap" />
                   <ItemsControl ItemsSource="{Binding ProjectChanges}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:ProjectChangeRow">
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="70,100,110,*" Margin="0,4">
-                          <TextBlock Text="{Binding Time}" Classes="caption mono" />
-                          <TextBlock Grid.Column="1" Text="{Binding Category}" Classes="caption" />
-                          <TextBlock Grid.Column="2" Text="{Binding Change}" Classes="caption" />
-                          <TextBlock Grid.Column="3" Text="{Binding Path}" Classes="caption mono" TextWrapping="Wrap" />
-                          <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding Validation}" Classes="caption" TextWrapping="Wrap" />
+                          <SelectableTextBlock Text="{Binding Time}" Classes="caption mono" />
+                          <SelectableTextBlock Grid.Column="1" Text="{Binding Category}" Classes="caption" />
+                          <SelectableTextBlock Grid.Column="2" Text="{Binding Change}" Classes="caption" />
+                          <SelectableTextBlock Grid.Column="3" Text="{Binding Path}" Classes="caption mono" TextWrapping="Wrap" />
+                          <SelectableTextBlock Grid.Row="1" Grid.Column="3" Text="{Binding Validation}" Classes="caption" TextWrapping="Wrap" />
                         </Grid>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -375,8 +384,8 @@
               Padding="24,14">
         <Grid RowDefinitions="Auto,Auto">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Text="RECENT ACTIVITY" Classes="section" />
-            <TextBlock Grid.Column="1" Text="{Binding LogFilePath}" Classes="caption mono" />
+            <SelectableTextBlock Text="RECENT ACTIVITY" Classes="section" />
+            <SelectableTextBlock Grid.Column="1" Text="{Binding LogFilePath}" Classes="caption mono" />
           </Grid>
 
           <Border Grid.Row="1"
@@ -392,12 +401,12 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="diagnostics:LogEntry">
                     <Grid ColumnDefinitions="66,42,*" Margin="0,1">
-                      <TextBlock Text="{Binding TimestampDisplay}" Classes="caption mono" />
-                      <TextBlock Grid.Column="1"
+                      <SelectableTextBlock Text="{Binding TimestampDisplay}" Classes="caption mono" />
+                      <SelectableTextBlock Grid.Column="1"
                                  Text="{Binding LevelLabel}"
                                  Classes="caption mono"
                                  Foreground="{Binding Level, Converter={StaticResource LogLevelBrush}}" />
-                      <TextBlock Grid.Column="2"
+                      <SelectableTextBlock Grid.Column="2"
                                  Text="{Binding Message}"
                                  Classes="caption"
                                  TextTrimming="CharacterEllipsis" />
@@ -424,8 +433,8 @@
 
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Spacing="4">
-              <TextBlock Text="Credits and references" Classes="h1" />
-              <TextBlock Classes="caption"
+              <SelectableTextBlock Text="Credits and references" Classes="h1" />
+              <SelectableTextBlock Classes="caption"
                          TextWrapping="Wrap"
                          Text="RimPulse is built in conversation with the RimWorld modding community. Every project consulted, and its creator, is listed below." />
             </StackPanel>
@@ -447,12 +456,12 @@
 
                       <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                          <TextBlock Text="{Binding ProjectName}"
+                          <SelectableTextBlock Text="{Binding ProjectName}"
                                      FontSize="13"
                                      FontWeight="SemiBold"
                                      Foreground="{DynamicResource TextPrimaryBrush}"
                                      VerticalAlignment="Center" />
-                          <TextBlock Text="{Binding CreatorLine}" Classes="caption" VerticalAlignment="Center" />
+                          <SelectableTextBlock Text="{Binding CreatorLine}" Classes="caption" VerticalAlignment="Center" />
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
@@ -461,7 +470,7 @@
                                   Padding="8,2"
                                   VerticalAlignment="Center"
                                   IsVisible="{Binding IsAttributed}">
-                            <TextBlock Text="{Binding UsageLabel}"
+                            <SelectableTextBlock Text="{Binding UsageLabel}"
                                        FontSize="10"
                                        FontWeight="Bold"
                                        Foreground="{DynamicResource AccentBrush}" />
@@ -478,21 +487,21 @@
                         </StackPanel>
                       </Grid>
 
-                      <TextBlock Grid.Row="1"
+                      <SelectableTextBlock Grid.Row="1"
                                  Text="{Binding Summary}"
                                  Classes="caption"
                                  TextWrapping="Wrap"
                                  Margin="0,6,0,0" />
 
-                      <TextBlock Grid.Row="2"
+                      <SelectableTextBlock Grid.Row="2"
                                  Text="{Binding Relevance}"
                                  Classes="body"
                                  TextWrapping="Wrap"
                                  Margin="0,6,0,0" />
 
                       <Grid Grid.Row="3" ColumnDefinitions="Auto,*" Margin="0,6,0,0">
-                        <TextBlock Text="{Binding LicenseText}" Classes="caption mono" />
-                        <TextBlock Grid.Column="1"
+                        <SelectableTextBlock Text="{Binding LicenseText}" Classes="caption mono" />
+                        <SelectableTextBlock Grid.Column="1"
                                    Text="{Binding UrlText}"
                                    Classes="caption mono"
                                    Foreground="{DynamicResource TextSecondaryBrush}"
@@ -507,9 +516,9 @@
           </ScrollViewer>
 
           <StackPanel Grid.Row="2" Spacing="6" Margin="0,16,0,0">
-            <TextBlock Text="ATTRIBUTION POLICY" Classes="section" />
-            <TextBlock Text="{Binding AttributionPolicy}" Classes="caption" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding CreditsCountText}" Classes="caption" />
+            <SelectableTextBlock Text="ATTRIBUTION POLICY" Classes="section" />
+            <SelectableTextBlock Text="{Binding AttributionPolicy}" Classes="caption" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding CreditsCountText}" Classes="caption" />
           </StackPanel>
         </Grid>
       </Border>

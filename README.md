@@ -176,6 +176,11 @@ read are `Compile` (literal paths, `*.cs` and `**/*.cs`), `Reference` with `Hint
 `PackageReference`. Other wildcards, item and string functions, `Choose` and MSBuild targets are not
 evaluated; anything ignored is reported with its file and condition rather than guessed at.
 
+Every piece of text in the window is selectable: drag to select and press Ctrl+C, including compiler
+diagnostics, paths and log lines. **Copy all errors** next to **Build mod** copies the complete diagnostic
+list of the last build — not just the rows the panel is capped at — with a header naming the project, the
+installation, the result and the log file, so a build failure can be pasted into a report as-is.
+
 If a hint path still does not resolve — it points at another machine's installation, or at a property nothing
 RimPulse can read defines — the same file name is taken from the selected installation's managed folder and
 the substitution is reported, so a project written on Windows still compiles on Linux.

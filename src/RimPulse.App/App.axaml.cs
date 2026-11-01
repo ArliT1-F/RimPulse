@@ -44,7 +44,8 @@ public partial class App : Application
                     Width = 760,
                     Height = 280,
                     Background = new SolidColorBrush(Color.Parse("#0D1015")),
-                    Content = new TextBlock
+                    // A SelectableTextBlock so the message itself can be copied out of the window.
+                    Content = new SelectableTextBlock
                     {
                         Margin = new Thickness(28),
                         TextWrapping = TextWrapping.Wrap,
