@@ -41,6 +41,71 @@ public sealed class BuildInputDiscoveryTests
     }
 
     [Fact]
+    public void Discover_ReportsAPackageReferenceItCannotResolve()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod</AssemblyName>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Lib.Harmony" Version="2.*" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Empty(unit.ReferencePaths);
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("Lib.Harmony 2.*", StringComparison.Ordinal)
+                       && problem.Contains("floating version", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Discover_ReadsAPackageReferenceThatIsAlreadyRestored()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod</AssemblyName>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Lib.Harmony" Version="2.3.3" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+
+        var packages = temp.CreateDirectory("packages");
+        temp.CreateFile("packages/lib.harmony/2.3.3/lib/net472/Lib.Harmony.dll", "MZ");
+
+        var folder = NuGetPackageResolver.GlobalPackagesFolder;
+        Environment.SetEnvironmentVariable("NUGET_PACKAGES", packages);
+
+        try
+        {
+            var result = BuildInputDiscovery.Discover(temp.Root);
+            var unit = Assert.Single(result.Units);
+
+            Assert.Contains(
+                unit.ReferencePaths,
+                path => path.EndsWith("Lib.Harmony.dll", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NUGET_PACKAGES", folder);
+        }
+    }
+
+    [Fact]
     public void Discover_ReadsLegacyCompileItemsAndHintPaths()
     {
         using var temp = new TempDirectory();

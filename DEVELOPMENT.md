@@ -129,6 +129,8 @@ Keep published output out of Git (`artifacts/` is ignored).
 | `dotnet: command not found` / SDK not found | .NET 10 SDK missing or not on `PATH` | Follow §1, then `dotnet --info` |
 | Window does not open on Wayland | Compositor/backend issue | Try `AVALONIA_X11=1` in a X11 session, or run under XWayland |
 | Configuration not saved | Config directory not writable | Check the paths in §4 and the log file for the `Error` entry |
+| Build fails with hundreds of `CS0246` / `CS0103` errors | A dependency is not in the reference set — usually a `PackageReference` that has not been restored, or an assembly the project only declares behind a condition | Read the `Build` entry in the log: it lists the projects, the reference set, the first diagnostics and an error-code histogram, and names any package it could not resolve |
+| Build error count is in the log but not the errors | Older logs only recorded the summary line | Every build now writes its detail block below the summary; check that the app you run is current |
 | Unexpected behaviour | — | Read the activity log first, then the log file; both record detection, configuration and UI errors |
 
 Logs are the first place to look. Every startup writes the platform, configuration path and log path:
@@ -136,6 +138,12 @@ Logs are the first place to look. Every startup writes the platform, configurati
 ```bash
 tail -f "${XDG_STATE_HOME:-$HOME/.local/state}/RimPulse/logs/rimpulse.log"
 ```
+
+A `Build` entry is written for every build. The summary line carries counts (`Build failed: 1051 error(s)…`) and
+the indented block below it carries what is needed to diagnose it: the discovered projects and their options, the
+reference assemblies the compilation used, the problems found before compiling (unresolved hint paths, unrestored
+`PackageReference` items), the first 40 diagnostics of each severity and an error-code histogram. The in-app
+diagnostics list is capped at 500 rows for the same reason; the log is the complete record of the first rows.
 
 ## 7. Verification status
 

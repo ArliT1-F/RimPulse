@@ -205,6 +205,10 @@ public static class BuildInputDiscovery
             }
         }
 
+        var targetFramework = Property(root, "TargetFramework")
+                              ?? Property(root, "TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        targetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework.Trim();
+
         var references = new List<string>();
         foreach (var item in Items(root, "Reference"))
         {
@@ -231,6 +235,38 @@ public static class BuildInputDiscovery
             references.Add(resolved);
         }
 
+        // A PackageReference is not resolved by MSBuild here: RimPulse cannot run NuGet restore. Packages that are
+        // already restored on this machine are read from the global packages folder; the rest are reported, so a
+        // missing Harmony (or any other package) shows up as one clear line instead of hundreds of CS0246 errors.
+        foreach (var item in Items(root, "PackageReference"))
+        {
+            var packageId = item.Attribute("Include")?.Value.Trim();
+            if (string.IsNullOrWhiteSpace(packageId))
+            {
+                continue;
+            }
+
+            if (item.Attribute("Condition") is not null)
+            {
+                problems.Add($"{displayName}: the package reference '{packageId}' is conditional, and RimPulse does not evaluate conditions; it was not referenced.");
+                continue;
+            }
+
+            var version = item.Attribute("Version")?.Value.Trim()
+                          ?? item.Elements().FirstOrDefault(child => child.Name.LocalName == "Version")?.Value.Trim();
+
+            var resolution = NuGetPackageResolver.Resolve(packageId, version, targetFramework);
+
+            if (resolution.Resolved)
+            {
+                references.AddRange(resolution.AssemblyPaths);
+            }
+            else if (resolution.Problem is not null)
+            {
+                problems.Add($"{displayName}: {resolution.Problem}");
+            }
+        }
+
         var projectReferences = new List<string>();
         foreach (var item in Items(root, "ProjectReference"))
         {
@@ -250,8 +286,6 @@ public static class BuildInputDiscovery
             projectReferences.Add(resolved);
         }
 
-        var targetFramework = Property(root, "TargetFramework")
-                              ?? Property(root, "TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         var defines = (Property(root, "DefineConstants") ?? string.Empty)
             .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToArray();
@@ -260,7 +294,7 @@ public static class BuildInputDiscovery
             projectFile,
             directory,
             assemblyName,
-            string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework.Trim(),
+            targetFramework,
             sources.ToArray(),
             references,
             projectReferences,
