@@ -8,9 +8,11 @@ namespace RimPulse.Core.Build;
 /// <c>HintPath</c> and the other projects it references, all resolved to absolute paths.
 /// </summary>
 /// <remarks>
-/// RimPulse reads a documented subset of MSBuild instead of evaluating it. Properties and items guarded by
-/// <c>Condition</c> are ignored, and wildcard patterns other than <c>*.cs</c> and <c>**/*.cs</c> are reported
-/// rather than guessed at. A project that needs more than that is a known limitation, not a silent failure.
+/// RimPulse evaluates the MSBuild subset a mod project actually uses — properties (including the nearest
+/// <c>Directory.Build.props</c> and the files a project imports), <c>Condition</c>s it understands and the
+/// <c>Configuration</c> it builds — and reports everything outside it: a condition it cannot evaluate, a
+/// wildcard pattern other than <c>*.cs</c> and <c>**/*.cs</c>, a package it cannot restore. A project that
+/// needs more than that is a known limitation, not a silent failure.
 /// </remarks>
 public sealed record ModCompileUnit(
     string ProjectFilePath,
@@ -50,10 +52,19 @@ public static class BuildInputDiscovery
     private const int MaxProjects = 16;
     private const int MaxDirectoryDepth = 6;
 
-    public static BuildInputInspection Discover(string projectRoot)
+    /// <param name="projectRoot">The mod directory to search for .csproj files.</param>
+    /// <param name="assemblySearchDirectories">
+    /// Directories searched for a referenced assembly whose declared <c>HintPath</c> does not exist on this
+    /// machine, normally the selected game's managed folder. A project that points at another machine's
+    /// installation would otherwise fail over a file RimPulse already has.
+    /// </param>
+    public static BuildInputInspection Discover(
+        string projectRoot,
+        IReadOnlyList<string>? assemblySearchDirectories = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
 
+        var searchDirectories = assemblySearchDirectories ?? Array.Empty<string>();
         var problems = new List<string>();
         string root;
 
@@ -102,7 +113,7 @@ public static class BuildInputDiscovery
 
         foreach (var projectFile in projectFiles)
         {
-            var unit = ReadUnit(projectFile, problems);
+            var unit = ReadUnit(projectFile, searchDirectories, problems);
             if (unit is not null)
             {
                 units.Add(unit);
@@ -136,7 +147,10 @@ public static class BuildInputDiscovery
         }
     }
 
-    private static ModCompileUnit? ReadUnit(string projectFile, List<string> problems)
+    private static ModCompileUnit? ReadUnit(
+        string projectFile,
+        IReadOnlyList<string> assemblySearchDirectories,
+        List<string> problems)
     {
         XDocument document;
 
@@ -172,17 +186,31 @@ public static class BuildInputDiscovery
 
         var directory = Path.GetDirectoryName(projectFile) ?? string.Empty;
         var displayName = Path.GetFileName(projectFile);
-        var assemblyName = Property(root, "AssemblyName")
+
+        // Properties are evaluated before the items that use them, so a hint path written as
+        // '$(RimWorldManagedDir)/Assembly-CSharp.dll' is a real path by the time it is read.
+        var properties = MsBuildPropertySet.Evaluate(projectFile, problems);
+
+        string? GetProperty(string name)
+        {
+            var value = properties.Get(name)?.Trim();
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+
+        var assemblyName = GetProperty("AssemblyName")
                            ?? Path.GetFileNameWithoutExtension(projectFile);
 
         var sources = new SortedSet<string>(StringComparer.Ordinal);
         var explicitCompileItems = Items(root, "Compile")
-            .Where(item => item.Attribute("Include") is not null)
+            .Where(item => item.Attribute("Include") is not null
+                           && properties.EvaluateCondition(item, displayName, problems))
             .ToArray();
 
         foreach (var item in explicitCompileItems)
         {
-            foreach (var file in Expand(item.Attribute("Include")!.Value, directory, displayName, problems))
+            var include = properties.Expand(item.Attribute("Include")!.Value);
+
+            foreach (var file in Expand(include, directory, displayName, problems))
             {
                 sources.Add(file);
             }
@@ -199,40 +227,46 @@ public static class BuildInputDiscovery
 
         foreach (var item in Items(root, "Compile").Where(item => item.Attribute("Remove") is not null))
         {
-            foreach (var file in Expand(item.Attribute("Remove")!.Value, directory, displayName, problems))
+            if (!properties.EvaluateCondition(item, displayName, problems))
+            {
+                continue;
+            }
+
+            var remove = properties.Expand(item.Attribute("Remove")!.Value);
+
+            foreach (var file in Expand(remove, directory, displayName, problems))
             {
                 sources.Remove(file);
             }
         }
 
-        var targetFramework = Property(root, "TargetFramework")
-                              ?? Property(root, "TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        var targetFramework = GetProperty("TargetFramework")
+                              ?? GetProperty("TargetFrameworks")?.Split(';', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         targetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework.Trim();
 
         var references = new List<string>();
         foreach (var item in Items(root, "Reference"))
         {
-            var hintPath = item.Elements().FirstOrDefault(child => child.Name.LocalName == "HintPath")?.Value.Trim();
-            if (string.IsNullOrEmpty(hintPath))
+            if (!properties.EvaluateCondition(item, displayName, problems))
+            {
+                continue;
+            }
+
+            var hintPath = item.Elements().FirstOrDefault(child => child.Name.LocalName == "HintPath")?.Value;
+            if (string.IsNullOrWhiteSpace(hintPath))
             {
                 // A plain <Reference Include="System" /> is covered by the game's own assemblies.
                 continue;
             }
 
-            var resolved = ResolveRelativePath(directory, hintPath);
-            if (resolved is null)
-            {
-                problems.Add($"{displayName}: the hint path '{hintPath}' could not be resolved.");
-                continue;
-            }
-
-            if (!File.Exists(resolved))
-            {
-                problems.Add($"{displayName}: the referenced assembly '{hintPath}' does not exist ({resolved}).");
-                continue;
-            }
-
-            references.Add(resolved);
+            AddHintPathReference(
+                displayName,
+                hintPath,
+                directory,
+                properties,
+                assemblySearchDirectories,
+                references,
+                problems);
         }
 
         // A PackageReference is not resolved by MSBuild here: RimPulse cannot run NuGet restore. Packages that are
@@ -240,20 +274,42 @@ public static class BuildInputDiscovery
         // missing Harmony (or any other package) shows up as one clear line instead of hundreds of CS0246 errors.
         foreach (var item in Items(root, "PackageReference"))
         {
-            var packageId = item.Attribute("Include")?.Value.Trim();
-            if (string.IsNullOrWhiteSpace(packageId))
+            var declaredId = item.Attribute("Include")?.Value;
+            if (string.IsNullOrWhiteSpace(declaredId))
             {
                 continue;
             }
 
-            if (item.Attribute("Condition") is not null)
+            if (!properties.EvaluateCondition(item, displayName, problems))
             {
-                problems.Add($"{displayName}: the package reference '{packageId}' is conditional, and RimPulse does not evaluate conditions; it was not referenced.");
                 continue;
             }
 
-            var version = item.Attribute("Version")?.Value.Trim()
-                          ?? item.Elements().FirstOrDefault(child => child.Name.LocalName == "Version")?.Value.Trim();
+            var declaredVersion = item.Attribute("Version")?.Value
+                                  ?? item.Elements().FirstOrDefault(child => child.Name.LocalName == "Version")?.Value;
+
+            if (!properties.TryExpand(declaredId.Trim(), out var packageId, out var undefinedProperty))
+            {
+                problems.Add(
+                    $"{displayName}: the package reference '{declaredId.Trim()}' uses the MSBuild property " +
+                    $"'{undefinedProperty}', which nothing RimPulse reads defines; it was not referenced.");
+                continue;
+            }
+
+            string? version = null;
+
+            if (!string.IsNullOrWhiteSpace(declaredVersion))
+            {
+                if (!properties.TryExpand(declaredVersion.Trim(), out var expandedVersion, out undefinedProperty))
+                {
+                    problems.Add(
+                        $"{displayName}: the version of the package reference '{packageId}' uses the MSBuild " +
+                        $"property '{undefinedProperty}', which nothing RimPulse reads defines; it was not referenced.");
+                    continue;
+                }
+
+                version = expandedVersion;
+            }
 
             var resolution = NuGetPackageResolver.Resolve(packageId, version, targetFramework);
 
@@ -270,23 +326,30 @@ public static class BuildInputDiscovery
         var projectReferences = new List<string>();
         foreach (var item in Items(root, "ProjectReference"))
         {
+            if (!properties.EvaluateCondition(item, displayName, problems))
+            {
+                continue;
+            }
+
             var include = item.Attribute("Include")?.Value;
             if (string.IsNullOrWhiteSpace(include))
             {
                 continue;
             }
 
-            var resolved = ResolveRelativePath(directory, include);
+            var declared = properties.Expand(include);
+
+            var resolved = ResolveRelativePath(directory, declared);
             if (resolved is null || !File.Exists(resolved))
             {
-                problems.Add($"{displayName}: the referenced project '{include}' does not exist.");
+                problems.Add($"{displayName}: the referenced project '{declared}' does not exist.");
                 continue;
             }
 
             projectReferences.Add(resolved);
         }
 
-        var defines = (Property(root, "DefineConstants") ?? string.Empty)
+        var defines = (GetProperty("DefineConstants") ?? string.Empty)
             .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToArray();
 
@@ -299,9 +362,9 @@ public static class BuildInputDiscovery
             references,
             projectReferences,
             defines,
-            Property(root, "LangVersion"),
-            string.Equals(Property(root, "AllowUnsafeBlocks"), "true", StringComparison.OrdinalIgnoreCase),
-            IsNullableEnabled(Property(root, "Nullable")));
+            GetProperty("LangVersion"),
+            string.Equals(GetProperty("AllowUnsafeBlocks"), "true", StringComparison.OrdinalIgnoreCase),
+            IsNullableEnabled(GetProperty("Nullable")));
     }
 
     private static bool IsNullableEnabled(string? value)
@@ -405,27 +468,100 @@ public static class BuildInputDiscovery
         }
     }
 
-    private static string? Property(XElement root, string name)
+    /// <summary>
+    /// Resolves one <c>HintPath</c> reference. A path written in terms of a property is expanded first; when the
+    /// declared file is not on this machine (a project pointing at another machine's install, or a property
+    /// nothing RimPulse reads defines) the same file name is looked for in the search directories before the
+    /// reference is dropped, because dropping it would turn one clear line into a wall of CS0246 errors.
+    /// </summary>
+    private static void AddHintPathReference(
+        string displayName,
+        string hintPath,
+        string directory,
+        MsBuildPropertySet properties,
+        IReadOnlyList<string> assemblySearchDirectories,
+        List<string> references,
+        List<string> problems)
     {
-        foreach (var group in root.Elements().Where(element => element.Name.LocalName == "PropertyGroup"))
+        var declared = hintPath.Trim();
+
+        if (!properties.TryExpand(declared, out var expanded, out var undefinedProperty))
         {
-            // Conditional property groups depend on how the project is built; RimPulse does not evaluate them.
-            if (group.Attribute("Condition") is not null)
+            // The file name itself is still readable, so the installation can still supply the assembly.
+            if (TryFindInSearchDirectories(assemblySearchDirectories, FileNameOf(expanded), out var replacement))
+            {
+                references.Add(replacement);
+                problems.Add(
+                    $"{displayName}: '{declared}' uses the MSBuild property '{undefinedProperty}', which nothing " +
+                    $"RimPulse reads defines; the installation's '{Path.GetFileName(replacement)}' is referenced instead.");
+            }
+            else
+            {
+                problems.Add(
+                    $"{displayName}: '{declared}' uses the MSBuild property '{undefinedProperty}', which nothing " +
+                    "RimPulse reads defines, so the reference was not added.");
+            }
+
+            return;
+        }
+
+        var resolved = ResolveRelativePath(directory, expanded);
+        if (resolved is null)
+        {
+            problems.Add($"{displayName}: the hint path '{expanded}' could not be resolved.");
+            return;
+        }
+
+        if (File.Exists(resolved))
+        {
+            references.Add(resolved);
+            return;
+        }
+
+        if (TryFindInSearchDirectories(assemblySearchDirectories, Path.GetFileName(resolved), out var fallback))
+        {
+            references.Add(fallback);
+            problems.Add(
+                $"{displayName}: the hint path '{expanded}' does not exist on this machine; " +
+                $"'{fallback}' is referenced instead.");
+            return;
+        }
+
+        problems.Add($"{displayName}: the referenced assembly '{expanded}' does not exist ({resolved}).");
+    }
+
+    /// <summary>The file name of a path written with either separator, on any platform.</summary>
+    private static string FileNameOf(string path) => Path.GetFileName(path.Replace('\\', '/'));
+
+    private static bool TryFindInSearchDirectories(
+        IReadOnlyList<string> directories,
+        string fileName,
+        out string path)
+    {
+        foreach (var directory in directories)
+        {
+            if (string.IsNullOrEmpty(directory) || string.IsNullOrWhiteSpace(fileName))
             {
                 continue;
             }
 
-            foreach (var property in group.Elements().Where(element => element.Name.LocalName == name))
+            try
             {
-                var value = property.Value.Trim();
-                if (value.Length > 0)
+                var candidate = Path.Combine(directory, fileName);
+                if (File.Exists(candidate))
                 {
-                    return value;
+                    path = candidate;
+                    return true;
                 }
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                // A malformed search directory is skipped; the caller reports the missing reference.
             }
         }
 
-        return null;
+        path = string.Empty;
+        return false;
     }
 
     private static IEnumerable<XElement> Items(XElement root, string name)

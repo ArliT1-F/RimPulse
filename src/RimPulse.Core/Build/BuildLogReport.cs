@@ -194,7 +194,7 @@ public static class BuildLogReport
                 builder.Append("Hint: ").Append(unresolved)
                     .AppendLine(" usually means the assembly that declares the type is not referenced. RimPulse references");
                 builder.AppendLine("  every .dll in the installation's managed directory, every HintPath and every restored");
-                builder.AppendLine("  NuGet package it could resolve; conditional and imported MSBuild items are not evaluated.");
+                builder.AppendLine("  NuGet package it could resolve; a condition RimPulse cannot evaluate is reported, not assumed.");
             }
         }
 

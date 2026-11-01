@@ -71,9 +71,10 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | Credits | `CreditEntry`, `CreditsCatalog` | The compiled-in list of every referenced project and creator, with license, usage classification and milestone relevance. Asserted by tests, rendered by the app |
 | App | `RimPulseServiceGraph` | Composition root: builds paths, log, configuration store and detector; owns their lifetime |
 | App | `ILinkLauncher`, `SystemLinkLauncher` | Opens https links through the OS shell; refuses anything that is not an absolute http(s) URL |
+| App | `IClipboardService`, `SystemClipboardService` | Copies text to the system clipboard for the build-error button, keeping clipboard access out of view models. A refused copy is reported, never thrown |
 | App | `CreditEntryViewModel` | Owns the per-row link commands so the credits list needs no ancestor bindings |
 | Projects | `LoadFoldersReader`, `LoadFoldersDocument`, `LoadFolderPlan` | Parses `LoadFolders.xml` (version sections, the four condition attributes, `_steam` suffix) and projects it onto one game version for a given set of active package IDs |
-| Build | `BuildInputDiscovery`, `ModCompileUnit` | Finds `.csproj` files and reads the documented MSBuild subset: `Compile`, `HintPath` references, `ProjectReference`, and the compile-relevant properties. Orders projects so dependencies come first |
+| Build | `BuildInputDiscovery`, `MsBuildPropertySet`, `ModCompileUnit` | Finds `.csproj` files and evaluates the documented MSBuild subset: properties (from the project, the nearest `Directory.Build.props`, `Import`ed props files and the environment), `Condition`s, `Compile`, `HintPath` references, `ProjectReference` and `PackageReference`. Orders projects so dependencies come first |
 | Build | `GameReferenceResolver`, `GameReferenceSet` | Collects the installation's assemblies and, for the Waylith layout, the host runtime's framework assemblies. Reference assemblies only; nothing is loaded or executed |
 | Build | `ModCompiler`, `CompileRequest`, `CompilationResult`, `BuildDiagnostic` | In-process Roslyn compilation into memory; the assembly is written only after success |
 | Build | `ModBuilder`, `ModBuildPlan`, `ModBuildResult` | Compiles the units in order, feeding each output to the projects that reference it |
@@ -156,6 +157,7 @@ library (the format subset needed is tiny).
 | D9 | Credits are a **compiled-in catalog in Core**, not documentation-only | The requirement is that every referenced creator/repository is featured *in the app*. A catalog in Core is testable (`CreditsCatalogTests` fails if an entry loses its creator, license or link) and cannot drift out of sync with the UI |
 | D10 | `CreditUsage` distinguishes Reference / Adapted / Bundled | Keeps the attribution promise honest: a project may be studied freely, but adopting code must change the classification and keep the author credited |
 | D11 | Link opening goes through `ILinkLauncher` | Keeps process launching out of view models and gives one place to validate URLs and report failures |
+| D16 | Every label is a **`SelectableTextBlock`**, and the build panel has **Copy all errors** | An error the user cannot select has to be retyped by hand to be reported. Selection is per control, so copying a whole failed build needs one button that copies every diagnostic, not just the rows the panel is capped at |
 | D12 | `LoadFolders.xml` is **interpreted, not evaluated against a real mod list** | RimPulse does not read the game's active mods yet. Evaluating conditions against a list it does not have would be a guess, so only the mod's own `packageId` counts as active and excluded folders are shown with their condition |
 | D13 | Mods are compiled **in-process with Roslyn**, not by invoking `dotnet build` | A 1.6 mod targets `net472`, which cannot be built on Linux with the .NET SDK, and invoking MSBuild would couple RimPulse to whatever toolchain the author has installed and return unstructured output |
 | D14 | The compiler **emits to memory first** | A failed build must never leave a partially written DLL in `Assemblies/` for the game to load |
@@ -196,6 +198,10 @@ Attribution policy (also shown in the app):
   RimWorld wiki (or-lists, the 1.6 `IfModActiveAll` and-list, combined attributes, `_steam` suffix).
 - Build discovery is tested against both project shapes seen in the wild (SDK-style with implicit sources and
   legacy with explicit `Compile`/`HintPath` items), including the paths MSBuild writes with backslashes.
+- MSBuild property evaluation is tested for what a mod project depends on: expansion order, the nearest
+  `Directory.Build.props`, `Import`ed props files (including a cycle), the conditions in use (`==`, `and`,
+  `Exists()`, `$(OS)`), the conditions that are reported instead of guessed, and the fallback to the selected
+  installation when a hint path points somewhere this machine does not have.
 - The compiler is exercised for real: tests compile source files against the test process's own runtime
   assemblies and assert on success, on located errors, and on nothing being written when compilation fails.
 - UI code is not unit tested (it is thin); the logic it depends on is in Core.

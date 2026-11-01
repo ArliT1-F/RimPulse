@@ -9,30 +9,40 @@
     <Setter Property="Padding" Value="18" />
   </Style>
 
-  <Style Selector="TextBlock.h1">
+  <Style Selector="TextBlock.h1, SelectableTextBlock.h1">
     <Setter Property="FontSize" Value="19" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
   </Style>
 
-  <Style Selector="TextBlock.section">
+  <Style Selector="TextBlock.section, SelectableTextBlock.section">
     <Setter Property="FontSize" Value="11" />
     <Setter Property="FontWeight" Value="Bold" />
     <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
   </Style>
 
-  <Style Selector="TextBlock.caption">
+  <Style Selector="TextBlock.caption, SelectableTextBlock.caption">
     <Setter Property="FontSize" Value="11" />
     <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
   </Style>
 
-  <Style Selector="TextBlock.body">
+  <Style Selector="TextBlock.body, SelectableTextBlock.body">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
   </Style>
 
-  <Style Selector="TextBlock.mono">
+  <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
     <Setter Property="FontFamily" Value="DejaVu Sans Mono, Liberation Mono, Cascadia Mono, Consolas" />
+  </Style>
+
+  <!--
+    Every piece of text in the window is a SelectableTextBlock, so it can be selected and copied (Ctrl+C).
+    The class styles above name both types because a type selector matches one control type, and the same
+    classes are used on both.
+  -->
+  <Style Selector="SelectableTextBlock">
+    <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="SelectionForegroundBrush" Value="#07130D" />
   </Style>
 
   <Style Selector="Button.accent">

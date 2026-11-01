@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using Avalonia.Threading;
 using RimPulse.App.Services;
 using RimPulse.Core.Configuration;
@@ -32,6 +33,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AppPaths _paths;
     private readonly string? _environmentRimWorldDirectory;
     private readonly ILinkLauncher _linkLauncher;
+    private readonly IClipboardService _clipboard;
 
     private RimPulseConfiguration _configuration = new();
     private InstallationViewModel? _selectedInstallation;
@@ -57,6 +59,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// compiler errors, which makes the list unusable and slow; the remainder is summarised and kept in the log.
     /// </summary>
     private const int MaxVisibleBuildDiagnostics = 500;
+
+    /// <summary>
+    /// Every diagnostic of the last build, in the order it was reported, without the display cap: the panel
+    /// shows the first <see cref="MaxVisibleBuildDiagnostics"/> rows, but copying the build errors must copy all
+    /// of them, which is the whole point of the button.
+    /// </summary>
+    private readonly List<string> _allBuildDiagnosticLines = new();
+
+    /// <summary>Clears <see cref="BuildCopyNotice"/> a few seconds after a copy, so it is feedback, not a label.</summary>
+    private readonly DispatcherTimer _copyNoticeTimer;
+    private string _buildCopyNotice = string.Empty;
     private ProjectMonitor? _projectMonitor;
     private string _monitorStatus = "Not monitoring a project.";
     private bool _disposed;
@@ -68,7 +81,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IDiagnosticLog log,
         AppPaths paths,
         string? environmentRimWorldDirectory = null,
-        ILinkLauncher? linkLauncher = null)
+        ILinkLauncher? linkLauncher = null,
+        IClipboardService? clipboard = null)
     {
         _detector = detector ?? throw new ArgumentNullException(nameof(detector));
         _configurationStore = configurationStore ?? throw new ArgumentNullException(nameof(configurationStore));
@@ -76,6 +90,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _environmentRimWorldDirectory = environmentRimWorldDirectory;
         _linkLauncher = linkLauncher ?? new SystemLinkLauncher();
+        _clipboard = clipboard ?? new SystemClipboardService();
 
         Installations = new ObservableCollection<InstallationViewModel>();
         SelectedDetails = new ObservableCollection<DetailRow>();
@@ -96,6 +111,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         BuildProjectCommand = new AsyncRelayCommand(BuildSelectedProjectAsync,
             () => !IsBuilding && !IsProjectBusy && _lastProjectInspection is not null,
             HandleCommandException);
+        CopyBuildDiagnosticsCommand = new AsyncRelayCommand(
+            CopyBuildDiagnosticsAsync,
+            () => HasBuildDiagnostics,
+            HandleCommandException);
+        _copyNoticeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+        _copyNoticeTimer.Tick += (_, _) =>
+        {
+            _copyNoticeTimer.Stop();
+            BuildCopyNotice = string.Empty;
+        };
         Credits = new ObservableCollection<CreditEntryViewModel>();
 
         foreach (var entry in CreditsCatalog.Entries)
@@ -211,6 +236,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public AsyncRelayCommand BuildProjectCommand { get; }
 
+    /// <summary>
+    /// Copies every diagnostic of the last build to the clipboard, with a header naming the project, the
+    /// installation and the result. Until this existed the only way to report a build error was to retype it.
+    /// </summary>
+    public AsyncRelayCommand CopyBuildDiagnosticsCommand { get; }
+
+    /// <summary>Feedback for the last copy: "Copied 42 line(s) to the clipboard.", or why it failed.</summary>
+    public string BuildCopyNotice
+    {
+        get => _buildCopyNotice;
+        private set
+        {
+            if (SetProperty(ref _buildCopyNotice, value))
+            {
+                OnPropertyChanged(nameof(HasBuildCopyNotice));
+            }
+        }
+    }
+
+    public bool HasBuildCopyNotice => BuildCopyNotice.Length > 0;
+
     public bool IsBuilding
     {
         get => _isBuilding;
@@ -308,10 +354,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         // Build results belong to one project: keeping them would attribute another project's errors to this
         // one, and bumping the sequence discards a build that is still running for the previous project.
         Interlocked.Increment(ref _buildSequence);
-        BuildDiagnostics.Clear();
+        ClearBuildDiagnostics();
         BuildDetails.Clear();
         BuildStatus = "No build has run for this project.";
-        OnPropertiesChanged(nameof(HasBuildDiagnostics), nameof(BuildTargetText));
+        OnPropertiesChanged(nameof(BuildTargetText));
         BuildProjectCommand.RaiseCanExecuteChanged();
         ProjectSummary = result.Metadata is null ? "Metadata unavailable; see problems below." :
             result.Problems.Count == 0 ? "Mod directory inspected." : "Mod directory inspected with warnings.";
@@ -494,9 +540,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         IsBuilding = true;
         var sequence = Interlocked.Increment(ref _buildSequence);
-        BuildDiagnostics.Clear();
+        ClearBuildDiagnostics();
         BuildDetails.Clear();
-        OnPropertiesChanged(nameof(HasBuildDiagnostics));
         BuildStatus = "Building…";
         _log.Info("Build", $"Building '{inspection.RootPath}' against {installation.DisplayName} ({installation.VersionDisplay}).");
 
@@ -506,6 +551,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             void AddRow(BuildDiagnosticRow row)
             {
+                // The list behind the copy button is never capped: a build that reports more than the panel shows
+                // must still copy completely.
+                _allBuildDiagnosticLines.Add(row.Display);
+
                 if (BuildDiagnostics.Count >= MaxVisibleBuildDiagnostics)
                 {
                     suppressed++;
@@ -518,8 +567,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var outputDirectory = Path.Combine(inspection.RootPath, "Assemblies");
             var outcome = await Task.Run(() =>
             {
-                var inputs = BuildInputDiscovery.Discover(inspection.RootPath);
                 var references = GameReferenceResolver.Resolve(installation);
+
+                // The installation doubles as the fallback for a hint path that points somewhere this machine
+                // does not have: a project written on another computer should still compile here.
+                var searchDirectories = installation.ManagedAssemblyDirectory is { Length: > 0 } managedDirectory
+                    ? new[] { managedDirectory }
+                    : Array.Empty<string>();
+
+                var inputs = BuildInputDiscovery.Discover(inspection.RootPath, searchDirectories);
                 var build = inputs.HasUnits
                     ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
                     : null;
@@ -560,7 +616,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                     build: null,
                     referenceDirectory: installation.ManagedAssemblyDirectory);
                 _log.Warning("Build", blocked.Message, blocked.Detail);
-                OnPropertiesChanged(nameof(HasBuildDiagnostics));
+                RaiseBuildDiagnosticsChanged();
                 return;
             }
 
@@ -607,12 +663,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (suppressed > 0)
             {
                 BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(
-                    $"… {suppressed} more diagnostic(s) are not listed here; the log file records the build inputs, its reference set and the first diagnostics of each severity."));
+                    $"… {suppressed} more diagnostic(s) are not listed here but are copied by " +
+                    "'Copy all errors'; the log file records the build inputs, its reference set and the first " +
+                    "diagnostics of each severity."));
             }
 
-            // HasBuildDiagnostics was only raised when the list was cleared above, which is exactly when it is
-            // false: without this the diagnostics panel never became visible.
-            OnPropertiesChanged(nameof(HasBuildDiagnostics));
+            // The panel was cleared above, which is exactly when this is false: without raising it here the
+            // diagnostics panel (and its copy button) never became visible.
+            RaiseBuildDiagnosticsChanged();
 
             BuildStatus = outcome.build.Summary;
 
@@ -638,6 +696,84 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             IsBuilding = false;
         }
+    }
+
+    /// <summary>Clears the visible rows, the complete list and the copy feedback of the previous build.</summary>
+    private void ClearBuildDiagnostics()
+    {
+        BuildDiagnostics.Clear();
+        _allBuildDiagnosticLines.Clear();
+        BuildCopyNotice = string.Empty;
+        _copyNoticeTimer.Stop();
+        RaiseBuildDiagnosticsChanged();
+    }
+
+    private void RaiseBuildDiagnosticsChanged()
+    {
+        OnPropertyChanged(nameof(HasBuildDiagnostics));
+        CopyBuildDiagnosticsCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>
+    /// Puts every diagnostic of the last build on the clipboard, prefixed by what it was built from. Losing the
+    /// header would make a pasted error impossible to attribute to a project, an installation and a run.
+    /// </summary>
+    private async Task CopyBuildDiagnosticsAsync()
+    {
+        if (_allBuildDiagnosticLines.Count == 0)
+        {
+            BuildCopyNotice = "There are no build diagnostics to copy.";
+            return;
+        }
+
+        var text = DescribeBuildForClipboard();
+        var copied = await _clipboard.SetTextAsync(text).ConfigureAwait(true);
+
+        if (copied)
+        {
+            BuildCopyNotice = _allBuildDiagnosticLines.Count == 1
+                ? "Copied 1 line to the clipboard."
+                : $"Copied {_allBuildDiagnosticLines.Count} lines to the clipboard.";
+
+            _log.Debug("Build", $"Copied {_allBuildDiagnosticLines.Count} build diagnostic(s) to the clipboard.");
+        }
+        else
+        {
+            BuildCopyNotice = "The clipboard is not available; the diagnostics are in the log file.";
+            _log.Warning("Build", "The clipboard was not available while copying the build diagnostics.");
+        }
+
+        _copyNoticeTimer.Stop();
+        _copyNoticeTimer.Start();
+    }
+
+    private string DescribeBuildForClipboard()
+    {
+        var builder = new StringBuilder();
+
+        builder.AppendLine("RimPulse build diagnostics");
+        builder.Append("Project: ")
+            .AppendLine(_lastProjectInspection?.RootPath ?? "no project inspected");
+
+        builder.Append("Installation: ")
+            .AppendLine(SelectedInstallation?.Model is { } installation
+                ? $"{installation.DisplayName} ({installation.VersionDisplay})"
+                : "none selected");
+
+        builder.Append("Result: ").AppendLine(BuildStatus);
+
+        builder.Append("Copied: ")
+            .AppendLine(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture));
+
+        builder.Append("Log: ").AppendLine(LogFilePath);
+        builder.AppendLine();
+
+        foreach (var line in _allBuildDiagnosticLines)
+        {
+            builder.AppendLine(line);
+        }
+
+        return builder.ToString().TrimEnd();
     }
 
     private async Task RemoveSelectedProjectAsync()
@@ -754,6 +890,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         StopProjectMonitor();
+        _copyNoticeTimer.Stop();
         _log.EntryWritten -= OnLogEntry;
     }
 

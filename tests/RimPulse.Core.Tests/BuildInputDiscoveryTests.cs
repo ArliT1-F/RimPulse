@@ -147,6 +147,157 @@ public sealed class BuildInputDiscoveryTests
     }
 
     [Fact]
+    public void Discover_ResolvesAHintPathWrittenWithAPropertyDefinedInTheProject()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+              <PropertyGroup>
+                <RimWorldManagedDir>$(MSBuildProjectDirectory)/../game/Managed</RimWorldManagedDir>
+              </PropertyGroup>
+              <ItemGroup>
+                <Compile Include="Main.cs" />
+                <Reference Include="Assembly-CSharp">
+                  <HintPath>$(RimWorldManagedDir)\Assembly-CSharp.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Main.cs", "// main");
+        var managed = temp.CreateFile("Source/game/Managed/Assembly-CSharp.dll", string.Empty);
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Empty(result.Problems);
+        Assert.Equal(Path.GetFullPath(managed), Assert.Single(unit.ReferencePaths));
+    }
+
+    [Fact]
+    public void Discover_ResolvesAHintPathWrittenWithAPropertyFromDirectoryBuildProps()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Directory.Build.props", """
+            <Project>
+              <PropertyGroup>
+                <RimWorldManagedDir>$(MSBuildThisFileDirectory)game/Managed</RimWorldManagedDir>
+              </PropertyGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <Reference Include="Assembly-CSharp">
+                  <HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+        var managed = temp.CreateFile("game/Managed/Assembly-CSharp.dll", string.Empty);
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Empty(result.Problems);
+        Assert.Equal(Path.GetFullPath(managed), Assert.Single(unit.ReferencePaths));
+    }
+
+    [Fact]
+    public void Discover_ReportsAHintPathWhosePropertyNothingDefines()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <Reference Include="Assembly-CSharp">
+                  <HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Empty(unit.ReferencePaths);
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("RimWorldManagedDir", StringComparison.Ordinal)
+                       && problem.Contains("nothing RimPulse reads defines", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Discover_ReferencesTheInstallationCopyWhenTheHintPathDoesNotExist()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <Reference Include="Assembly-CSharp">
+                  <HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+        var installation = temp.CreateDirectory("game");
+        var managed = temp.CreateFile("game/Assembly-CSharp.dll", string.Empty);
+
+        var result = BuildInputDiscovery.Discover(temp.Root, new[] { installation });
+
+        var unit = Assert.Single(result.Units);
+        Assert.Equal(Path.GetFullPath(managed), Assert.Single(unit.ReferencePaths));
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("is referenced instead", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Discover_EvaluatesAConditionalPropertyElement()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <AssemblyName>WindowsMod</AssemblyName>
+                <AssemblyName Condition="'$(OS)' != 'Windows_NT'">UnixMod</AssemblyName>
+              </PropertyGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var expected = OperatingSystem.IsWindows() ? "WindowsMod" : "UnixMod";
+        Assert.Equal(expected, Assert.Single(result.Units).AssemblyName);
+    }
+
+    [Fact]
+    public void Discover_EvaluatesAConditionalCompileItem()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+              <ItemGroup>
+                <Compile Include="Main.cs" />
+                <Compile Include="Unix.cs" Condition="'$(OS)' != 'Windows_NT'" />
+                <Compile Include="Nowhere.cs" Condition="Exists('$(MSBuildProjectDirectory)/Nowhere.cs')" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Main.cs", "// main");
+        temp.CreateFile("Source/TestMod/Unix.cs", "// unix");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Equal(OperatingSystem.IsWindows() ? 1 : 2, unit.SourceFiles.Count);
+        Assert.DoesNotContain(unit.SourceFiles, file => file.EndsWith("Nowhere.cs", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Discover_ReportsModsWithoutAnyProject()
     {
         using var temp = new TempDirectory();
