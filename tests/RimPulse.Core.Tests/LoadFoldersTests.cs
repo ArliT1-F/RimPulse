@@ -70,10 +70,11 @@ public sealed class LoadFoldersTests
 
         var plan = LoadFoldersReader.Evaluate(document, GameVersion.Parse("1.6"), ["other.mod"]);
 
-        Assert.Equal(new[] { "/", "1.6" }, plan.Folders);
-        Assert.Equal(2, plan.Skipped.Count);
-        Assert.Contains("IfModActive=", plan.Skipped[0].ConditionDisplay, StringComparison.Ordinal);
-        Assert.Contains("IfModNotActive=", plan.Skipped[1].ConditionDisplay, StringComparison.Ordinal);
+        // IfModNotActive passes when the listed mod is absent, so only the positive condition is skipped.
+        Assert.Equal(new[] { "/", "1.6", "1.6/NoRival" }, plan.Folders);
+        var skipped = Assert.Single(plan.Skipped);
+        Assert.Equal("1.6/Dlc", skipped.Path);
+        Assert.Contains("IfModActive=", skipped.ConditionDisplay, StringComparison.Ordinal);
     }
 
     [Fact]
