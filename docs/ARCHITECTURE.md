@@ -77,6 +77,7 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | Build | `GameReferenceResolver`, `GameReferenceSet` | Collects the installation's assemblies and, for the Waylith layout, the host runtime's framework assemblies. Reference assemblies only; nothing is loaded or executed |
 | Build | `ModCompiler`, `CompileRequest`, `CompilationResult`, `BuildDiagnostic` | In-process Roslyn compilation into memory; the assembly is written only after success |
 | Build | `ModBuilder`, `ModBuildPlan`, `ModBuildResult` | Compiles the units in order, feeding each output to the projects that reference it |
+| Build | `AssemblyInspector`, `AssemblyInspection`, `AssemblyTypeInfo` | Reads a produced assembly's name, version, references and types with `System.Reflection.Metadata`; the assembly is never loaded into RimPulse, so inspecting a mod cannot run its code |
 | App | `MainWindowViewModel` | Installation list, selection, custom path entry, project list, inspection, monitoring, build, activity log mirror, status text |
 | App | `ProjectRow`, `BuildDiagnosticRow` | Presentation projections of the project list and build output |
 | App | `InstallationViewModel`, `DetailRow`, `ProblemRow` | Presentation projections of installation results |
@@ -203,8 +204,6 @@ Attribution policy (also shown in the app):
 
 ## 10. Planned boundaries for later milestones
 
-- **Assembly inspection** — reading a compiled mod assembly (types, Harmony patch classes) with
-  `System.Reflection.Metadata`, which is in-box, so no new dependency is needed.
 - **Version-specific backends** — a common interface in Core (`IRimWorldBackend`), with
   `RimWorld16Backend` and `RimWorld17Backend` implementations that are free to differ in reference
   resolution, assembly loading and reload strategy. No shared implementation will be forced where the

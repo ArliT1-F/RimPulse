@@ -320,6 +320,16 @@
                                MaxWidth="520"
                                HorizontalAlignment="Left" />
                   </StackPanel>
+                  <ItemsControl ItemsSource="{Binding BuildDetails}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DetailRow">
+                        <Grid ColumnDefinitions="180,*" Margin="0,3">
+                          <TextBlock Text="{Binding Label}" Classes="caption" VerticalAlignment="Top" />
+                          <TextBlock Grid.Column="1" Text="{Binding Value}" Classes="caption mono" TextWrapping="Wrap" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
                   <ItemsControl ItemsSource="{Binding BuildDiagnostics}" IsVisible="{Binding HasBuildDiagnostics}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:BuildDiagnosticRow">

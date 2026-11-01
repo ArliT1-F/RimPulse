@@ -80,6 +80,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ProjectChanges = new ObservableCollection<ProjectChangeRow>();
         Projects = new ObservableCollection<ProjectRow>();
         BuildDiagnostics = new ObservableCollection<BuildDiagnosticRow>();
+        BuildDetails = new ObservableCollection<DetailRow>();
         InspectProjectCommand = new AsyncRelayCommand(() => InspectProjectAsync(ProjectPathInput),
             () => !IsProjectBusy && !string.IsNullOrWhiteSpace(ProjectPathInput), HandleCommandException);
         AddProjectCommand = new AsyncRelayCommand(() => InspectProjectAsync(ProjectPathInput),
@@ -196,8 +197,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _projectSummary, value);
     }
 
-    /// <summary>Compiler diagnostics of the last build, newest run first.</summary>
+    /// <summary>Compiler diagnostics of the last build.</summary>
     public ObservableCollection<BuildDiagnosticRow> BuildDiagnostics { get; }
+
+    /// <summary>What the last build produced, read back from the assembly metadata.</summary>
+    public ObservableCollection<DetailRow> BuildDetails { get; }
 
     public AsyncRelayCommand BuildProjectCommand { get; }
 
@@ -299,6 +303,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         // one, and bumping the sequence discards a build that is still running for the previous project.
         Interlocked.Increment(ref _buildSequence);
         BuildDiagnostics.Clear();
+        BuildDetails.Clear();
         BuildStatus = "No build has run for this project.";
         OnPropertiesChanged(nameof(HasBuildDiagnostics), nameof(BuildTargetText));
         BuildProjectCommand.RaiseCanExecuteChanged();
@@ -484,6 +489,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IsBuilding = true;
         var sequence = Interlocked.Increment(ref _buildSequence);
         BuildDiagnostics.Clear();
+        BuildDetails.Clear();
         OnPropertiesChanged(nameof(HasBuildDiagnostics));
         BuildStatus = "Building…";
         _log.Info("Build", $"Building '{inspection.RootPath}' against {installation.DisplayName} ({installation.VersionDisplay}).");
@@ -498,7 +504,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 var build = inputs.HasUnits
                     ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
                     : null;
-                return (inputs, references, build);
+
+                // Read the produced assemblies back from metadata, on the same worker thread: this is what the
+                // game would load, so it is worth showing, and it never loads the mod into RimPulse.
+                AssemblyInspection[] inspections = build is { Succeeded: true }
+                    ? build.OutputPaths.Select(AssemblyInspector.Inspect).ToArray()
+                    : [];
+                return (inputs, references, build, inspections);
             }).ConfigureAwait(true);
 
             // A newer build (or a different project) supersedes this result.
@@ -537,6 +549,33 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             foreach (var problem in outcome.build.Problems)
             {
                 BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            foreach (var inspection in outcome.inspections)
+            {
+                BuildDetails.Add(new DetailRow($"Assembly ({Path.GetFileName(inspection.AssemblyPath)})", inspection.Summary));
+
+                if (inspection.References.Count > 0)
+                {
+                    BuildDetails.Add(new DetailRow("References", string.Join(", ", inspection.References)));
+                }
+
+                if (inspection.Types.Count > 0)
+                {
+                    var names = inspection.Types
+                        .Take(40)
+                        .Select(type => type.FullName)
+                        .ToArray();
+                    var more = inspection.Types.Count > names.Length || inspection.TypesTruncated
+                        ? $"{Environment.NewLine}… and {inspection.Types.Count - names.Length} more"
+                        : string.Empty;
+                    BuildDetails.Add(new DetailRow("Types", string.Join(Environment.NewLine, names) + more));
+                }
+
+                foreach (var problem in inspection.Problems)
+                {
+                    BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+                }
             }
 
             BuildStatus = outcome.build.Summary;

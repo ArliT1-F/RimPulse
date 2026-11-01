@@ -197,11 +197,9 @@ comment.
 
 1. **XML validation** — changed XML is checked for well-formedness only. Definition-level checks (root
    elements, `defName` uniqueness, `Abstract`/`ParentName` references) and RimWorld schema validation remain.
-2. **Assembly inspection** — after a successful build, read the produced assembly (types, Harmony patch
-   classes) with `System.Reflection.Metadata` and report what the game would load.
-3. **Build fidelity** — the MSBuild subset RimPulse understands is documented in the README. Conditional
+2. **Build fidelity** — the MSBuild subset RimPulse understands is documented in the README. Conditional
    properties/items, additional wildcards and `Directory.Build.props` are not evaluated yet.
-4. **Dependency resolution** — declared dependencies are displayed, not resolved against installed mods; the
+3. **Dependency resolution** — declared dependencies are displayed, not resolved against installed mods; the
    load-folder projection currently treats only the mod itself as active.
-5. **Runtime integration (milestone 4)** — companion mod, IPC and process management. Compilation is the last
+4. **Runtime integration (milestone 4)** — companion mod, IPC and process management. Compilation is the last
    prerequisite that is now in place.

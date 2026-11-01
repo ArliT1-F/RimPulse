@@ -80,7 +80,8 @@ This repository is being built incrementally, one milestone at a time. Features 
 - Finds the mod's `.csproj` projects, resolves the game assemblies of the selected installation and **compiles
   the mod in-process with Roslyn**, reporting every diagnostic with file, line and column. A build writes the
   assembly into the mod's `Assemblies` folder only when you press **Build** and only after compilation
-  succeeded.
+  succeeded. The produced assembly is then read back from its metadata (name, version, references, types), so
+  the build panel shows what the game would actually load.
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
@@ -89,8 +90,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 ### Deliberately not there yet
 
 No dependency resolution against installed mods, no XML schema/semantic validation, no game launching, hot
-reload or testing environment, and no reading of a compiled assembly's contents. Those are later milestones;
-nothing in the UI pretends otherwise.
+reload or testing environment. Those are later milestones; nothing in the UI pretends otherwise.
 
 ---
 
