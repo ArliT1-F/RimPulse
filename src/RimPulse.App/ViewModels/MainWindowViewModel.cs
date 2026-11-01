@@ -551,28 +551,28 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
             }
 
-            foreach (var inspection in outcome.inspections)
+            foreach (var assembly in outcome.inspections)
             {
-                BuildDetails.Add(new DetailRow($"Assembly ({Path.GetFileName(inspection.AssemblyPath)})", inspection.Summary));
+                BuildDetails.Add(new DetailRow($"Assembly ({Path.GetFileName(assembly.AssemblyPath)})", assembly.Summary));
 
-                if (inspection.References.Count > 0)
+                if (assembly.References.Count > 0)
                 {
-                    BuildDetails.Add(new DetailRow("References", string.Join(", ", inspection.References)));
+                    BuildDetails.Add(new DetailRow("References", string.Join(", ", assembly.References)));
                 }
 
-                if (inspection.Types.Count > 0)
+                if (assembly.Types.Count > 0)
                 {
-                    var names = inspection.Types
+                    var names = assembly.Types
                         .Take(40)
                         .Select(type => type.FullName)
                         .ToArray();
-                    var more = inspection.Types.Count > names.Length || inspection.TypesTruncated
-                        ? $"{Environment.NewLine}… and {inspection.Types.Count - names.Length} more"
+                    var more = assembly.Types.Count > names.Length || assembly.TypesTruncated
+                        ? $"{Environment.NewLine}… and {assembly.Types.Count - names.Length} more"
                         : string.Empty;
                     BuildDetails.Add(new DetailRow("Types", string.Join(Environment.NewLine, names) + more));
                 }
 
-                foreach (var problem in inspection.Problems)
+                foreach (var problem in assembly.Problems)
                 {
                     BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
                 }

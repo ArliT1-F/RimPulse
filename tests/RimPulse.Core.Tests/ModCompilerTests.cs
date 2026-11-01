@@ -121,19 +121,25 @@ public sealed class ModCompilerTests
     public void Compile_ReportsMissingSourcesAndUnusableReferences()
     {
         using var temp = new TempDirectory();
-        var missingSource = ModCompiler.Compile(new CompileRequest("TestMod", [temp.Combine("nope.cs")], RuntimeReferences()));
+        var missingSource = ModCompiler.Compile(
+            new CompileRequest("TestMod", [temp.Combine("nope.cs")], RuntimeReferences()),
+            TestContext.Current.CancellationToken);
         Assert.False(missingSource.Succeeded);
         Assert.Contains(missingSource.Problems, problem => problem.Contains("does not exist", StringComparison.Ordinal));
 
         var source = temp.CreateFile("Source.cs", "namespace TestMod; public class Thing { }");
-        var noReferences = ModCompiler.Compile(new CompileRequest("TestMod", [source], []));
+        var noReferences = ModCompiler.Compile(
+            new CompileRequest("TestMod", [source], []),
+            TestContext.Current.CancellationToken);
         Assert.False(noReferences.Succeeded);
         Assert.Contains(noReferences.Problems, problem => problem.Contains("No reference assemblies", StringComparison.Ordinal));
 
         // A file that is not a PE image must fail the build loudly, whether Roslyn rejects it while loading
         // the reference or while emitting.
         var notAnAssembly = temp.CreateFile("Fake.dll", "this is not a PE file");
-        var badReference = ModCompiler.Compile(new CompileRequest("TestMod", [source], [notAnAssembly]));
+        var badReference = ModCompiler.Compile(
+            new CompileRequest("TestMod", [source], [notAnAssembly]),
+            TestContext.Current.CancellationToken);
         Assert.False(badReference.Succeeded);
         Assert.NotEmpty(badReference.Problems.Concat(badReference.Diagnostics.Select(diagnostic => diagnostic.Display)));
     }
@@ -144,7 +150,9 @@ public sealed class ModCompilerTests
         using var temp = new TempDirectory();
         var source = temp.CreateFile("Source.cs", "namespace TestMod; public class Thing { }");
 
-        var result = ModCompiler.Compile(new CompileRequest("  ", [source], RuntimeReferences()));
+        var result = ModCompiler.Compile(
+            new CompileRequest("  ", [source], RuntimeReferences()),
+            TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Contains(result.Problems, problem => problem.Contains("assembly name", StringComparison.Ordinal));
