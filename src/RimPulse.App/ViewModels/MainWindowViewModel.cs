@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using RimPulse.App.Services;
 using RimPulse.Core.Configuration;
+using RimPulse.Core.Build;
 using RimPulse.Core.Credits;
 using RimPulse.Core.Diagnostics;
 using RimPulse.Core.Game;
@@ -47,6 +48,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private ModProjectInspection? _lastProjectInspection;
     private bool _suppressProjectSelection;
     private bool _isProjectBusy;
+    private bool _isBuilding;
+    private string _buildStatus = "No build has run yet.";
+    private long _buildSequence;
     private ProjectMonitor? _projectMonitor;
     private string _monitorStatus = "Not monitoring a project.";
     private bool _disposed;
@@ -75,12 +79,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ProjectProblems = new ObservableCollection<ProblemRow>();
         ProjectChanges = new ObservableCollection<ProjectChangeRow>();
         Projects = new ObservableCollection<ProjectRow>();
+        BuildDiagnostics = new ObservableCollection<BuildDiagnosticRow>();
         InspectProjectCommand = new AsyncRelayCommand(() => InspectProjectAsync(ProjectPathInput),
             () => !IsProjectBusy && !string.IsNullOrWhiteSpace(ProjectPathInput), HandleCommandException);
         AddProjectCommand = new AsyncRelayCommand(() => InspectProjectAsync(ProjectPathInput),
             () => !IsProjectBusy && !string.IsNullOrWhiteSpace(ProjectPathInput), HandleCommandException);
         RemoveProjectCommand = new AsyncRelayCommand(RemoveSelectedProjectAsync,
             () => !IsProjectBusy && SelectedProject is not null, HandleCommandException);
+        BuildProjectCommand = new AsyncRelayCommand(BuildSelectedProjectAsync,
+            () => !IsBuilding && !IsProjectBusy && _lastProjectInspection is not null,
+            HandleCommandException);
         Credits = new ObservableCollection<CreditEntryViewModel>();
 
         foreach (var entry in CreditsCatalog.Entries)
@@ -188,6 +196,39 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _projectSummary, value);
     }
 
+    /// <summary>Compiler diagnostics of the last build, newest run first.</summary>
+    public ObservableCollection<BuildDiagnosticRow> BuildDiagnostics { get; }
+
+    public AsyncRelayCommand BuildProjectCommand { get; }
+
+    public bool IsBuilding
+    {
+        get => _isBuilding;
+        private set
+        {
+            if (SetProperty(ref _isBuilding, value))
+            {
+                BuildProjectCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public string BuildStatus
+    {
+        get => _buildStatus;
+        private set => SetProperty(ref _buildStatus, value);
+    }
+
+    /// <summary>Where the assemblies go, so the write into the mod directory is never a surprise.</summary>
+    public string BuildTargetText => _lastProjectInspection is null
+        ? "Select a project and a usable installation to build."
+        : SelectedInstallation?.Model is { IsUsable: true } installation
+            ? $"Compiles against {installation.DisplayName} ({installation.VersionDisplay}) and writes to " +
+              $"{Path.Combine(_lastProjectInspection.RootPath, "Assemblies")}."
+            : "Select a usable RimWorld installation: a mod can only be compiled against real game assemblies.";
+
+    public bool HasBuildDiagnostics => BuildDiagnostics.Count > 0;
+
     /// <summary>Inspect and remember a directory selected through the path field or folder picker.</summary>
     public async Task InspectProjectAsync(string path, bool persist = true)
     {
@@ -253,6 +294,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         AddLoadFolderProjection(result);
         foreach (var problem in result.Problems) ProjectProblems.Add(new ProblemRow(problem));
+
+        // Build results belong to one project; keeping them would attribute another project's errors to this one.
+        BuildDiagnostics.Clear();
+        BuildStatus = "No build has run for this project.";
+        OnPropertiesChanged(nameof(HasBuildDiagnostics), nameof(BuildTargetText));
+        BuildProjectCommand.RaiseCanExecuteChanged();
         ProjectSummary = result.Metadata is null ? "Metadata unavailable; see problems below." :
             result.Problems.Count == 0 ? "Mod directory inspected." : "Mod directory inspected with warnings.";
     }
@@ -403,6 +450,111 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             HandleCommandException(ex);
+        }
+    }
+
+    /// <summary>
+    /// Discovers the mod's projects, resolves the game assemblies and compiles in dependency order. Runs off
+    /// the UI thread; a build started for a project that is no longer selected is discarded.
+    /// </summary>
+    private async Task BuildSelectedProjectAsync()
+    {
+        if (IsBuilding || IsProjectBusy)
+        {
+            return;
+        }
+
+        var inspection = _lastProjectInspection;
+        if (inspection is null)
+        {
+            BuildStatus = "Inspect a mod project before building.";
+            return;
+        }
+
+        var installation = SelectedInstallation?.Model;
+        if (installation is null || !installation.IsUsable)
+        {
+            BuildStatus = "Select a usable RimWorld installation — a mod is compiled against the real game assemblies.";
+            _log.Warning("Build", BuildStatus);
+            return;
+        }
+
+        IsBuilding = true;
+        var sequence = Interlocked.Increment(ref _buildSequence);
+        BuildDiagnostics.Clear();
+        OnPropertiesChanged(nameof(HasBuildDiagnostics));
+        BuildStatus = "Building…";
+        _log.Info("Build", $"Building '{inspection.RootPath}' against {installation.DisplayName} ({installation.VersionDisplay}).");
+
+        try
+        {
+            var outputDirectory = Path.Combine(inspection.RootPath, "Assemblies");
+            var outcome = await Task.Run(() =>
+            {
+                var inputs = BuildInputDiscovery.Discover(inspection.RootPath);
+                var references = GameReferenceResolver.Resolve(installation);
+                var build = inputs.HasUnits
+                    ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
+                    : null;
+                return (inputs, references, build);
+            }).ConfigureAwait(true);
+
+            // A newer build (or a different project) supersedes this result.
+            if (_disposed || sequence != Interlocked.Read(ref _buildSequence))
+            {
+                return;
+            }
+
+            foreach (var problem in outcome.inputs.Problems)
+            {
+                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            foreach (var problem in outcome.references.Problems)
+            {
+                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            if (outcome.build is null)
+            {
+                BuildStatus = outcome.inputs.Problems.FirstOrDefault()
+                              ?? outcome.references.Problems.FirstOrDefault()
+                              ?? "There was nothing to build.";
+                _log.Warning("Build", BuildStatus);
+                return;
+            }
+
+            foreach (var unit in outcome.build.Units)
+            {
+                foreach (var diagnostic in unit.Compilation.Diagnostics)
+                {
+                    BuildDiagnostics.Add(BuildDiagnosticRow.FromDiagnostic(diagnostic, unit.AssemblyName));
+                }
+            }
+
+            foreach (var problem in outcome.build.Problems)
+            {
+                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            BuildStatus = outcome.build.Summary;
+
+            if (outcome.build.Succeeded)
+            {
+                _log.Info("Build", outcome.build.Summary);
+            }
+            else
+            {
+                _log.Warning("Build", outcome.build.Summary);
+            }
+        }
+        finally
+        {
+            if (sequence == Interlocked.Read(ref _buildSequence))
+            {
+                IsBuilding = false;
+                OnPropertiesChanged(nameof(HasBuildDiagnostics));
+            }
         }
     }
 
@@ -628,6 +780,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 DisplayProjectInspection(inspection);
             }
+
+            OnPropertyChanged(nameof(BuildTargetText));
 
             if (!_suppressSelectionPersistence)
             {

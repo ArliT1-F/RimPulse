@@ -309,6 +309,29 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
+                  <TextBlock Text="BUILD" Classes="section" Margin="0,8,0,0" />
+                  <TextBlock Text="{Binding BuildTargetText}" Classes="caption" TextWrapping="Wrap" />
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Build mod" Classes="accent" Command="{Binding BuildProjectCommand}" />
+                    <TextBlock Text="{Binding BuildStatus}"
+                               Classes="caption"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"
+                               MaxWidth="520"
+                               HorizontalAlignment="Left" />
+                  </StackPanel>
+                  <ItemsControl ItemsSource="{Binding BuildDiagnostics}" IsVisible="{Binding HasBuildDiagnostics}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:BuildDiagnosticRow">
+                        <TextBlock Text="{Binding Display}"
+                                   Classes="caption mono"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="Compiles the mod's C# projects against the selected installation's assemblies. XML is validated for syntax only; nothing is reloaded into a running game yet." Classes="caption" TextWrapping="Wrap" />
+
                   <TextBlock Text="FILE MONITOR" Classes="section" Margin="0,8,0,0" />
                   <TextBlock Text="{Binding MonitorStatus}" Classes="caption" TextWrapping="Wrap" />
                   <TextBlock Text="Recent changes (latest 250). XML syntax is checked only; no build or reload is performed." Classes="caption" TextWrapping="Wrap" />
