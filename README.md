@@ -163,10 +163,22 @@ only as a direct result of pressing the button. Projects are compiled in depende
 project is built first and the projects that reference it are linked against that output. Diagnostics are
 listed with file, line and column. `DEBUG` and `TRACE` are defined, matching a development build.
 
-RimPulse reads a documented subset of MSBuild: `Compile` items (literal paths, `*.cs` and `**/*.cs`), `Reference`
-with `HintPath`, `ProjectReference`, and the unconditional `AssemblyName`, `TargetFramework`, `LangVersion`,
-`DefineConstants`, `AllowUnsafeBlocks` and `Nullable` properties. Conditional properties and items, other
-wildcards and MSBuild targets are not evaluated, and anything ignored is reported rather than guessed.
+RimPulse evaluates the part of MSBuild a mod project actually uses, and properties are evaluated before the
+items that read them. In MSBuild's order: the properties MSBuild itself provides (`Configuration` is `Debug`,
+`Platform` is `AnyCPU`), the environment, the nearest `Directory.Build.props`, the files the project
+`Import`s, and then every `PropertyGroup` in document order. A hint path written as
+`$(RimWorldManagedDir)/Assembly-CSharp.dll` therefore resolves, including when that property lives in
+`Directory.Build.props` — the usual shape of a mod project that builds against a local game install.
+
+`Condition`s are evaluated as well, on property groups, properties, imports and items: `==`, `!=`, `<`, `>`,
+`<=`, `>=`, `and`, `or`, `!`, parentheses, and the `Exists()` and `HasTrailingSlash()` functions. The items
+read are `Compile` (literal paths, `*.cs` and `**/*.cs`), `Reference` with `HintPath`, `ProjectReference` and
+`PackageReference`. Other wildcards, item and string functions, `Choose` and MSBuild targets are not
+evaluated; anything ignored is reported with its file and condition rather than guessed at.
+
+If a hint path still does not resolve — it points at another machine's installation, or at a property nothing
+RimPulse can read defines — the same file name is taken from the selected installation's managed folder and
+the substitution is reported, so a project written on Windows still compiles on Linux.
 
 ## How installation detection works
 

@@ -518,8 +518,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var outputDirectory = Path.Combine(inspection.RootPath, "Assemblies");
             var outcome = await Task.Run(() =>
             {
-                var inputs = BuildInputDiscovery.Discover(inspection.RootPath);
                 var references = GameReferenceResolver.Resolve(installation);
+
+                // The installation doubles as the fallback for a hint path that points somewhere this machine
+                // does not have: a project written on another computer should still compile here.
+                var searchDirectories = installation.ManagedAssemblyDirectory is { Length: > 0 } managedDirectory
+                    ? new[] { managedDirectory }
+                    : Array.Empty<string>();
+
+                var inputs = BuildInputDiscovery.Discover(inspection.RootPath, searchDirectories);
                 var build = inputs.HasUnits
                     ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
                     : null;

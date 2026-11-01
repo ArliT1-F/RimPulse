@@ -103,6 +103,13 @@ compiler invocation.
   game ships a specific reference set, RimPulse should use that instead.
 - For the Unity/Mono layout nothing from the host runtime is added: a 1.6 installation ships `mscorlib` and
   `System` itself, and mixing a `net10.0` framework into a `net472` compile would be wrong.
+- A `HintPath` is expanded before it is used: MSBuild properties from the project, the nearest
+  `Directory.Build.props`, the props files it imports and the environment are evaluated first, and the
+  `Condition`s on properties, imports and items are evaluated too. This is what makes the usual mod project —
+  `<HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>` — work at all.
+- If a declared hint path still points at a file that is not on this machine (another computer's install, a
+  Windows path on Linux), the same file name is taken from the selected installation's managed folder and the
+  substitution is reported, so one missing path does not become a wall of `CS0246` errors.
 - Harmony is **not** referenced automatically. A mod that needs `0Harmony.dll` must declare a `HintPath` to it
   (its own csproj normally already does) — or declare it as a `PackageReference`, which RimPulse resolves from
   the **already restored** NuGet global packages folder (`NUGET_PACKAGES`, else `~/.nuget/packages`), choosing

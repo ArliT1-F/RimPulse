@@ -73,7 +73,7 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | App | `ILinkLauncher`, `SystemLinkLauncher` | Opens https links through the OS shell; refuses anything that is not an absolute http(s) URL |
 | App | `CreditEntryViewModel` | Owns the per-row link commands so the credits list needs no ancestor bindings |
 | Projects | `LoadFoldersReader`, `LoadFoldersDocument`, `LoadFolderPlan` | Parses `LoadFolders.xml` (version sections, the four condition attributes, `_steam` suffix) and projects it onto one game version for a given set of active package IDs |
-| Build | `BuildInputDiscovery`, `ModCompileUnit` | Finds `.csproj` files and reads the documented MSBuild subset: `Compile`, `HintPath` references, `ProjectReference`, and the compile-relevant properties. Orders projects so dependencies come first |
+| Build | `BuildInputDiscovery`, `MsBuildPropertySet`, `ModCompileUnit` | Finds `.csproj` files and evaluates the documented MSBuild subset: properties (from the project, the nearest `Directory.Build.props`, `Import`ed props files and the environment), `Condition`s, `Compile`, `HintPath` references, `ProjectReference` and `PackageReference`. Orders projects so dependencies come first |
 | Build | `GameReferenceResolver`, `GameReferenceSet` | Collects the installation's assemblies and, for the Waylith layout, the host runtime's framework assemblies. Reference assemblies only; nothing is loaded or executed |
 | Build | `ModCompiler`, `CompileRequest`, `CompilationResult`, `BuildDiagnostic` | In-process Roslyn compilation into memory; the assembly is written only after success |
 | Build | `ModBuilder`, `ModBuildPlan`, `ModBuildResult` | Compiles the units in order, feeding each output to the projects that reference it |
@@ -196,6 +196,10 @@ Attribution policy (also shown in the app):
   RimWorld wiki (or-lists, the 1.6 `IfModActiveAll` and-list, combined attributes, `_steam` suffix).
 - Build discovery is tested against both project shapes seen in the wild (SDK-style with implicit sources and
   legacy with explicit `Compile`/`HintPath` items), including the paths MSBuild writes with backslashes.
+- MSBuild property evaluation is tested for what a mod project depends on: expansion order, the nearest
+  `Directory.Build.props`, `Import`ed props files (including a cycle), the conditions in use (`==`, `and`,
+  `Exists()`, `$(OS)`), the conditions that are reported instead of guessed, and the fallback to the selected
+  installation when a hint path points somewhere this machine does not have.
 - The compiler is exercised for real: tests compile source files against the test process's own runtime
   assemblies and assert on success, on located errors, and on nothing being written when compilation fails.
 - UI code is not unit tested (it is thin); the logic it depends on is in Core.
