@@ -140,6 +140,15 @@ public static class CreditsCatalog
             Usage: CreditUsage.Bundled),
 
         new CreditEntry(
+            ProjectName: "Roslyn (.NET Compiler Platform)",
+            Creator: "Roslyn contributors (Microsoft and the .NET community)",
+            Url: "https://github.com/dotnet/roslyn",
+            Summary: "The open-source C# compiler and code-analysis API that also ships with the .NET SDK.",
+            Relevance: "Shipped dependency: RimPulse.Core compiles mod sources in-process with Microsoft.CodeAnalysis.CSharp 4.14.0 (MIT), so a project targeting .NET Framework 4.7.2 can be built on Linux and its diagnostics reach RimPulse structured, with file, line and column.",
+            License: "MIT",
+            Usage: CreditUsage.Bundled),
+
+        new CreditEntry(
             ProjectName: "xUnit.net",
             Creator: "xUnit.net contributors",
             Url: "https://github.com/xunit/xunit",

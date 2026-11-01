@@ -93,6 +93,22 @@ the version from it. `Version.txt` is the only version source.
 This is why the build layer of RimPulse must be a **version-specific backend** rather than one generic
 compiler invocation.
 
+**What is implemented today** (`RimPulse.Core.Build`):
+
+- The reference set is every `*.dll` in the installation's managed directory (the `Managed/` folder for 1.6,
+  the installation root for 1.7), de-duplicated by assembly name with the game's copy winning.
+- For the Waylith layout the assemblies of the runtime RimPulse itself runs on
+  (`TRUSTED_PLATFORM_ASSEMBLIES`) are added, because a `net10.0` mod needs `System.*` and the installation does
+  not ship the whole framework. **This is an assumption to verify against a real 1.7 installation**: if the
+  game ships a specific reference set, RimPulse should use that instead.
+- For the Unity/Mono layout nothing from the host runtime is added: a 1.6 installation ships `mscorlib` and
+  `System` itself, and mixing a `net10.0` framework into a `net472` compile would be wrong.
+- Harmony is **not** referenced automatically. A mod that needs `0Harmony.dll` must declare a `HintPath` to it
+  (its own csproj normally already does), because which Harmony assembly matches a 1.6 or 1.7 install depends
+  on the Harmony mod version the author has.
+- Mod assemblies are emitted to the mod's `Assemblies/` folder, which is where both versions load a mod's
+  DLLs. Whether that folder is the only lookup path in 1.7 is part of open question 3 below.
+
 ### Assembly reload (milestone 6) — the hard problem
 
 > Prior art to study before writing any reload code (both featured in the app's Credits panel):
@@ -149,16 +165,23 @@ Keep this list current; each item blocks or shapes a later milestone.
    direct save loading) — must be verified per version.
 6. Where each version keeps `ModsConfig.xml` and whether it can be prepared before launch.
 7. Whether both versions can coexist in one installation directory (Steam beta switching).
+8. Whether the host runtime's .NET 10 assemblies are an adequate reference set for compiling a 1.7 mod, or
+   whether the game provides its own reference/targeting assemblies (see §3, build and reference resolution).
+9. Which `.NET` framework a 1.7 installation expects a mod's `TargetFramework` to declare, and whether a
+   `net472`-targeted 1.6 mod is accepted by the 1.7 loader (the mod is said to work, but the loader may warn).
 
 ## 5. How RimPulse encodes this today
 
-Milestone 1 only needs the layout and version facts, which are implemented and tested:
+The layout and version facts are implemented and tested:
 
 - `RimPulse.Core.Installations.InstallationLayout` — `UnityMono` vs `Waylith` vs `Unknown`.
 - `RimPulse.Core.Installations.InstallationProbe` — recognises both layouts, verifies the required
   assemblies per layout, and never guesses a version.
 - `RimPulse.Core.Game.GameVersion` — `major.minor` plus build text, so 1.8 is detected and reported as
   unsupported instead of being ignored.
+- `RimPulse.Core.Build.GameReferenceResolver` — the per-layout reference set described in §3.
+- `RimPulse.Core.Projects.LoadFoldersReader` — version sections and conditions, as documented by the wiki;
+  used to show which content folders a version would load.
 
 No runtime, IPC or reload code exists yet, and nothing in this document should be read as a claim that it
 does.

@@ -48,14 +48,17 @@ public sealed class CreditsCatalogTests
         var urls = CreditsCatalog.Entries.Select(entry => entry.Url).ToArray();
 
         Assert.Contains("https://github.com/AvaloniaUI/Avalonia", urls);
+        Assert.Contains("https://github.com/dotnet/roslyn", urls);
         Assert.Contains("https://github.com/xunit/xunit", urls);
 
         var avalonia = CreditsCatalog.Entries.Single(entry => entry.Url.EndsWith("AvaloniaUI/Avalonia", StringComparison.Ordinal));
+        var roslyn = CreditsCatalog.Entries.Single(entry => entry.Url.EndsWith("dotnet/roslyn", StringComparison.Ordinal));
         var xunit = CreditsCatalog.Entries.Single(entry => entry.Url.EndsWith("xunit/xunit", StringComparison.Ordinal));
 
         Assert.Equal(CreditUsage.Bundled, avalonia.Usage);
+        Assert.Equal(CreditUsage.Bundled, roslyn.Usage);
         Assert.Equal(CreditUsage.DevelopmentDependency, xunit.Usage);
-        Assert.Equal(RequiredUrls.Length + 2, CreditsCatalog.Entries.Count);
+        Assert.Equal(RequiredUrls.Length + 3, CreditsCatalog.Entries.Count);
     }
 
     [Fact]

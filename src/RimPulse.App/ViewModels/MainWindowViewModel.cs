@@ -295,7 +295,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         AddLoadFolderProjection(result);
         foreach (var problem in result.Problems) ProjectProblems.Add(new ProblemRow(problem));
 
-        // Build results belong to one project; keeping them would attribute another project's errors to this one.
+        // Build results belong to one project: keeping them would attribute another project's errors to this
+        // one, and bumping the sequence discards a build that is still running for the previous project.
+        Interlocked.Increment(ref _buildSequence);
         BuildDiagnostics.Clear();
         BuildStatus = "No build has run for this project.";
         OnPropertiesChanged(nameof(HasBuildDiagnostics), nameof(BuildTargetText));
@@ -550,11 +552,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            if (sequence == Interlocked.Read(ref _buildSequence))
-            {
-                IsBuilding = false;
-                OnPropertiesChanged(nameof(HasBuildDiagnostics));
-            }
+            IsBuilding = false;
         }
     }
 

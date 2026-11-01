@@ -34,13 +34,19 @@ marked **planned** is design intent, not implemented behaviour.
 `RimPulse.Core` must never reference Avalonia, and must be testable without a display server or a RimWorld
 installation. `RimPulse.App` may not contain filesystem or game logic that belongs in Core.
 
+What each module contains today:
+
+```text
+RimPulse.Core/Projects      About.xml metadata, content folders, LoadFolders.xml interpretation
+RimPulse.Core/Monitoring    FileSystemWatcher with debouncing and change classification
+RimPulse.Core/Build         .csproj discovery, game reference resolution, Roslyn compilation
+RimPulse.Core/Validation    changed-file XML well-formedness checks
+```
+
 Planned for later milestones (none of this exists yet):
 
 ```text
-RimPulse.Core/Projects      mod project model, About.xml parsing, dependency graph
-RimPulse.Core/Monitoring    FileSystemWatcher with debouncing and change classification
-RimPulse.Core/Build         Roslyn compilation, reference resolution
-RimPulse.Core/Validation    XML validation, definition diagnostics
+RimPulse.Core/Validation    RimWorld schema and definition-level diagnostics
 RimPulse.Core/Runtime       process launch/management, runtime state machine
 RimPulse.Core/IPC           versioned JSON protocol shared with the companion mods
 RimPulse.Backends/          RimWorld16 · RimWorld17 (version-specific implementations of the above)
@@ -66,8 +72,14 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | App | `RimPulseServiceGraph` | Composition root: builds paths, log, configuration store and detector; owns their lifetime |
 | App | `ILinkLauncher`, `SystemLinkLauncher` | Opens https links through the OS shell; refuses anything that is not an absolute http(s) URL |
 | App | `CreditEntryViewModel` | Owns the per-row link commands so the credits list needs no ancestor bindings |
-| App | `MainWindowViewModel` | Installaion list, selection, custom path entry, activity log mirror, status text |
-| App | `InstallationViewModel`, `DetailRow`, `ProblemRow` | Presentation projections of Core results |
+| Projects | `LoadFoldersReader`, `LoadFoldersDocument`, `LoadFolderPlan` | Parses `LoadFolders.xml` (version sections, the four condition attributes, `_steam` suffix) and projects it onto one game version for a given set of active package IDs |
+| Build | `BuildInputDiscovery`, `ModCompileUnit` | Finds `.csproj` files and reads the documented MSBuild subset: `Compile`, `HintPath` references, `ProjectReference`, and the compile-relevant properties. Orders projects so dependencies come first |
+| Build | `GameReferenceResolver`, `GameReferenceSet` | Collects the installation's assemblies and, for the Waylith layout, the host runtime's framework assemblies. Reference assemblies only; nothing is loaded or executed |
+| Build | `ModCompiler`, `CompileRequest`, `CompilationResult`, `BuildDiagnostic` | In-process Roslyn compilation into memory; the assembly is written only after success |
+| Build | `ModBuilder`, `ModBuildPlan`, `ModBuildResult` | Compiles the units in order, feeding each output to the projects that reference it |
+| App | `MainWindowViewModel` | Installation list, selection, custom path entry, project list, inspection, monitoring, build, activity log mirror, status text |
+| App | `ProjectRow`, `BuildDiagnosticRow` | Presentation projections of the project list and build output |
+| App | `InstallationViewModel`, `DetailRow`, `ProblemRow` | Presentation projections of installation results |
 
 ## 4. Detection pipeline
 
@@ -109,12 +121,18 @@ Rules the pipeline enforces:
 | Steam VDF malformed | Warning logged, that Steam root skipped, other roots still scanned |
 | Log sink failure | Swallowed by design; logging must never take the app down |
 | Unexpected exception in a UI command | Logged, surfaced in the status bar, application keeps running |
+| `LoadFolders.xml` malformed or unsafe | Problems reported on the project; sections that did parse are still shown |
+| Load-folder entry outside the mod, or with an unknown condition attribute | Entry ignored and reported; the rest of the section still applies |
+| `.csproj` malformed, or an unsupported wildcard/Condition | Reported as a build problem; other projects are still read |
+| Compilation error | Diagnostics with file/line/column; **no assembly is written**, and dependent projects are skipped |
+| Build without a usable installation | Refused before compiling, with the reason in the status bar and the log |
 
 ## 7. Dependencies and why
 
 | Package | Why it is justified |
 | --- | --- |
 | `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent` (12.1.4) | Cross-platform desktop UI required by the brief. Avalonia 12 targets .NET 8+ and recommends .NET 10, which matches the rest of the stack |
+| `Microsoft.CodeAnalysis.CSharp` (4.14.0) | Roslyn is the only way to get structured, located diagnostics for a mod without its own toolchain. In-process compilation also builds `net472` projects on Linux, where `dotnet build` cannot, and keeps the build result a first-class object instead of parsed console output. Adds ~10 MB to the shipped app |
 | `xunit.v3` (4.0.2) | Test framework. Runs on Microsoft.Testing.Platform, so no VSTest packages are needed |
 | *none* for VDF, MVVM, logging or JSON | Each is 50–150 lines of straightforward code in this repository; a dependency would add supply-chain and API-churn risk for no benefit |
 
@@ -137,6 +155,10 @@ library (the format subset needed is tiny).
 | D9 | Credits are a **compiled-in catalog in Core**, not documentation-only | The requirement is that every referenced creator/repository is featured *in the app*. A catalog in Core is testable (`CreditsCatalogTests` fails if an entry loses its creator, license or link) and cannot drift out of sync with the UI |
 | D10 | `CreditUsage` distinguishes Reference / Adapted / Bundled | Keeps the attribution promise honest: a project may be studied freely, but adopting code must change the classification and keep the author credited |
 | D11 | Link opening goes through `ILinkLauncher` | Keeps process launching out of view models and gives one place to validate URLs and report failures |
+| D12 | `LoadFolders.xml` is **interpreted, not evaluated against a real mod list** | RimPulse does not read the game's active mods yet. Evaluating conditions against a list it does not have would be a guess, so only the mod's own `packageId` counts as active and excluded folders are shown with their condition |
+| D13 | Mods are compiled **in-process with Roslyn**, not by invoking `dotnet build` | A 1.6 mod targets `net472`, which cannot be built on Linux with the .NET SDK, and invoking MSBuild would couple RimPulse to whatever toolchain the author has installed and return unstructured output |
+| D14 | The compiler **emits to memory first** | A failed build must never leave a partially written DLL in `Assemblies/` for the game to load |
+| D15 | Reference assemblies for the Waylith layout come from **the host runtime** (`TRUSTED_PLATFORM_ASSEMBLIES`) | The 1.7 installation ships the game's assemblies, not the whole framework, and RimPulse has no other honest source. Documented as an assumption to re-check against a real 1.7 installation |
 
 ## 8a. Credits and attribution
 
@@ -169,12 +191,20 @@ Attribution policy (also shown in the app):
   catalog (completeness, attribution and licensing rules).
 - Tests use real temporary directories (`TempDirectory`) and real files — no mocking framework and no
   in-memory filesystem abstraction. This keeps the tested code on the same path as production code.
+- `LoadFolders.xml` parsing and projection are tested against the condition semantics published by the
+  RimWorld wiki (or-lists, the 1.6 `IfModActiveAll` and-list, combined attributes, `_steam` suffix).
+- Build discovery is tested against both project shapes seen in the wild (SDK-style with implicit sources and
+  legacy with explicit `Compile`/`HintPath` items), including the paths MSBuild writes with backslashes.
+- The compiler is exercised for real: tests compile source files against the test process's own runtime
+  assemblies and assert on success, on located errors, and on nothing being written when compilation fails.
 - UI code is not unit tested (it is thin); the logic it depends on is in Core.
 - Game-dependent behaviour (milestones 4–6) will need an integration test harness against a real
   installation; the verification status must be recorded honestly per feature.
 
 ## 10. Planned boundaries for later milestones
 
+- **Assembly inspection** — reading a compiled mod assembly (types, Harmony patch classes) with
+  `System.Reflection.Metadata`, which is in-box, so no new dependency is needed.
 - **Version-specific backends** — a common interface in Core (`IRimWorldBackend`), with
   `RimWorld16Backend` and `RimWorld17Backend` implementations that are free to differ in reference
   resolution, assembly loading and reload strategy. No shared implementation will be forced where the
