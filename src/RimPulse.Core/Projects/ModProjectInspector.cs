@@ -11,9 +11,13 @@ public sealed record ModMetadata(string? Name, string? PackageId, string? Author
 /// <summary>A declared dependency; Version is null for unversioned declarations.</summary>
 public sealed record ModDependency(string? PackageId, string? DisplayName, string? Version);
 
-/// <summary>A point-in-time inspection. Detected folders are not necessarily active for any game version.</summary>
+/// <summary>
+/// A point-in-time inspection. Detected folders are not necessarily active for any game version; the
+/// interpreted <see cref="LoadFolders"/> document is what says which folders a version would load.
+/// </summary>
 public sealed record ModProjectInspection(string RootPath, ModMetadata? Metadata,
-    IReadOnlyList<string> Folders, bool HasLoadFolders, IReadOnlyList<string> Problems);
+    IReadOnlyList<string> Folders, bool HasLoadFolders, LoadFoldersDocument LoadFolders,
+    IReadOnlyList<string> Problems);
 
 /// <summary>Inspects a mod without changing its files or assuming its content layout is fixed.</summary>
 public static class ModProjectInspector
@@ -31,10 +35,16 @@ public static class ModProjectInspector
         var root = InstallationProbe.NormalizePath(path);
         var problems = new List<string>();
         var folders = new List<string>();
+
+        // Read LoadFolders.xml before anything else so an unusable version section is reported alongside
+        // the rest of the project problems.
+        var loadFolders = LoadFoldersReader.Read(root);
+        problems.AddRange(loadFolders.Problems);
+
         if (!Directory.Exists(root))
         {
             problems.Add("The mod directory does not exist or is not accessible.");
-            return new(root, null, folders, false, problems);
+            return new(root, null, folders, loadFolders.Exists, loadFolders, problems);
         }
 
         try
@@ -64,11 +74,11 @@ public static class ModProjectInspector
         }
 
         var about = Path.Combine(root, "About", "About.xml");
-        var hasLoadFolders = File.Exists(Path.Combine(root, "LoadFolders.xml"));
+        var hasLoadFolders = loadFolders.Exists;
         if (!File.Exists(about))
         {
             problems.Add("About/About.xml was not found or is not accessible.");
-            return new(root, null, folders, hasLoadFolders, problems);
+            return new(root, null, folders, hasLoadFolders, loadFolders, problems);
         }
 
         try
@@ -80,7 +90,7 @@ public static class ModProjectInspector
             if (element is null || element.Name != "ModMetaData")
             {
                 problems.Add("About.xml must have a ModMetaData root element.");
-                return new(root, null, folders, hasLoadFolders, problems);
+                return new(root, null, folders, hasLoadFolders, loadFolders, problems);
             }
 
             static string? Value(XElement? node)
@@ -119,12 +129,12 @@ public static class ModProjectInspector
             {
                 foreach (var version in byVersion.Elements()) AddDependencies(version, version.Name.LocalName);
             }
-            return new(root, new(name, packageId, author, versions, dependencies), folders, hasLoadFolders, problems);
+            return new(root, new(name, packageId, author, versions, dependencies), folders, hasLoadFolders, loadFolders, problems);
         }
         catch (Exception ex) when (ex is XmlException or IOException or UnauthorizedAccessException)
         {
             problems.Add($"Could not read About.xml: {ex.Message}");
-            return new(root, null, folders, hasLoadFolders, problems);
+            return new(root, null, folders, hasLoadFolders, loadFolders, problems);
         }
     }
 }

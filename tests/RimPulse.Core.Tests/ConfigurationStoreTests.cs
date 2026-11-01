@@ -102,6 +102,55 @@ public sealed class ConfigurationStoreTests
     }
 
     [Fact]
+    public async Task LoadAsync_PromotesTheSingleProjectPathOfSchemaOneIntoTheProjectList()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("config.json", """
+            { "schemaVersion": 1, "selectedProjectPath": "/mods/Old" }
+            """);
+        var store = new ConfigurationStore(temp.Combine("config.json"), new DiagnosticLog());
+
+        var result = await store.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("/mods/Old", result.Configuration.SelectedProjectPath);
+        Assert.Equal(new[] { "/mods/Old" }, result.Configuration.ProjectPaths);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RoundTripsTheProjectListAndDropsDuplicates()
+    {
+        using var temp = new TempDirectory();
+        var store = new ConfigurationStore(temp.Combine("config.json"), new DiagnosticLog());
+
+        var configuration = new RimPulseConfiguration
+        {
+            SelectedProjectPath = " /mods/Second ",
+            ProjectPaths = ["/mods/First", " /mods/Second ", "/mods/first", "", "/mods/Third"],
+        };
+
+        await store.SaveAsync(configuration, TestContext.Current.CancellationToken);
+        var result = await store.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("/mods/Second", result.Configuration.SelectedProjectPath);
+        Assert.Equal(new[] { "/mods/First", "/mods/Second", "/mods/Third" }, result.Configuration.ProjectPaths);
+        Assert.Equal(RimPulseConfiguration.CurrentSchemaVersion, result.Configuration.SchemaVersion);
+    }
+
+    [Fact]
+    public void Normalize_CapsTheRememberedProjectList()
+    {
+        var configuration = new RimPulseConfiguration
+        {
+            ProjectPaths = [.. Enumerable.Range(0, RimPulseConfiguration.MaxProjectPaths + 5).Select(i => $"/mods/Mod{i}")],
+        };
+
+        configuration.Normalize();
+
+        Assert.Equal(RimPulseConfiguration.MaxProjectPaths, configuration.ProjectPaths.Count);
+        Assert.Equal("/mods/Mod0", configuration.ProjectPaths[0]);
+    }
+
+    [Fact]
     public async Task LoadAsync_TreatsEmptyFileAsUnreadable()
     {
         using var temp = new TempDirectory();
