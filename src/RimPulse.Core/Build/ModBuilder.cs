@@ -79,17 +79,14 @@ public static class ModBuilder
         var diagnostics = new List<BuildDiagnostic>();
         var results = new List<BuildUnitResult>(plan.Units.Count);
         var builtOutputs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var reportedNotes = new HashSet<string>(StringComparer.Ordinal);
         var succeeded = true;
 
         foreach (var unit in plan.Units)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var references = new List<string>(plan.ReferencePaths);
-            references.AddRange(unit.ReferencePaths);
-            references.AddRange(unit.ProjectReferences
-                .Select(reference => builtOutputs.TryGetValue(reference, out var output) ? output : null)
-                .OfType<string>());
+            var references = MergeReferences(plan, unit, builtOutputs, problems, reportedNotes);
 
             var outputPath = plan.OutputDirectory is null
                 ? null
@@ -138,4 +135,139 @@ public static class ModBuilder
         var elapsed = started.Elapsed;
         return new ModBuildResult(succeeded, results, diagnostics, problems, elapsed);
     }
+
+    /// <summary>
+    /// Merges the shared installation references with the ones a single project declares.
+    /// </summary>
+    /// <remarks>
+    /// The same simple assembly name may only appear once in a compilation: a second copy makes Roslyn report
+    /// CS1703 ("multiple assemblies with equivalent identity have been imported") and turns every type they
+    /// share into an ambiguous reference, which buries the real errors. So a duplicate is resolved explicitly
+    /// and reported, never silently, because which copy wins changes what the mod compiles against:
+    /// <list type="bullet">
+    ///   <item>
+    ///     <description>
+    ///       <b>Platform assemblies</b> (the game, Unity, the framework) always come from the installation — a
+    ///       mod's copy of <c>Assembly-CSharp.dll</c> is the wrong game's API, not a newer one.
+    ///     </description>
+    ///   </item>
+    ///   <item>
+    ///     <description>
+    ///       <b>Any other assembly</b> (Harmony, a shared library) keeps the mod's own copy, which is the version
+    ///       its author builds against and ships next to the mod.
+    ///     </description>
+    ///   </item>
+    /// </list>
+    /// </remarks>
+    private static List<string> MergeReferences(
+        ModBuildPlan plan,
+        ModCompileUnit unit,
+        IReadOnlyDictionary<string, string> builtOutputs,
+        List<string> problems,
+        HashSet<string> reportedNotes)
+    {
+        var references = new List<string>(plan.ReferencePaths.Count + unit.ReferencePaths.Count);
+        var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var fromInstallation = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in plan.ReferencePaths)
+        {
+            var name = Path.GetFileName(path);
+            if (name.Length == 0 || !positions.TryAdd(name, references.Count))
+            {
+                continue;
+            }
+
+            references.Add(path);
+            fromInstallation.Add(name);
+        }
+
+        foreach (var path in unit.ReferencePaths)
+        {
+            var name = Path.GetFileName(path);
+
+            if (name.Length == 0)
+            {
+                references.Add(path);
+                continue;
+            }
+
+            if (!positions.TryGetValue(name, out var position))
+            {
+                positions[name] = references.Count;
+                references.Add(path);
+                continue;
+            }
+
+            if (fromInstallation.Contains(name) && IsPlatformAssembly(name))
+            {
+                Report(
+                    reportedNotes,
+                    problems,
+                    $"{unit.AssemblyName}: '{name}' from the project is not referenced; the installation's copy is used.");
+                continue;
+            }
+
+            if (!fromInstallation.Contains(name))
+            {
+                // The project lists the same assembly twice. The first copy stays, which is deterministic and
+                // matches how MSBuild keeps its items in order.
+                Report(
+                    reportedNotes,
+                    problems,
+                    $"{unit.AssemblyName}: '{name}' is referenced twice by the project; '{references[position]}' is used.");
+                continue;
+            }
+
+            Report(
+                reportedNotes,
+                problems,
+                $"{unit.AssemblyName}: '{name}' from the project replaces the installation's copy.");
+            fromInstallation.Remove(name);
+            references[position] = path;
+        }
+
+        foreach (var reference in unit.ProjectReferences)
+        {
+            if (!builtOutputs.TryGetValue(reference, out var output))
+            {
+                continue;
+            }
+
+            var name = Path.GetFileName(output);
+            if (positions.TryAdd(name, references.Count))
+            {
+                references.Add(output);
+            }
+        }
+
+        return references;
+    }
+
+    private static void Report(HashSet<string> reportedNotes, List<string> problems, string note)
+    {
+        if (reportedNotes.Add(note))
+        {
+            problems.Add(note);
+        }
+    }
+
+    /// <summary>
+    /// True for assemblies the game or the framework owns, so a project-local copy must not shadow them.
+    /// </summary>
+    private static bool IsPlatformAssembly(string fileName)
+        => PlatformAssemblyPrefixes.Any(prefix => fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+    private static readonly string[] PlatformAssemblyPrefixes =
+    [
+        "Assembly-CSharp",
+        "UnityEngine",
+        "Unity.",
+        "mscorlib",
+        "System",
+        "netstandard",
+        "Mono.",
+        "I18N",
+        "Facades",
+    ];
 }

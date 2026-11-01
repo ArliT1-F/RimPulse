@@ -51,6 +51,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isBuilding;
     private string _buildStatus = "No build has run yet.";
     private long _buildSequence;
+
+    /// <summary>
+    /// Upper bound on rows added to the build diagnostics list. A single failed build can report over a thousand
+    /// compiler errors, which makes the list unusable and slow; the remainder is summarised and kept in the log.
+    /// </summary>
+    private const int MaxVisibleBuildDiagnostics = 500;
     private ProjectMonitor? _projectMonitor;
     private string _monitorStatus = "Not monitoring a project.";
     private bool _disposed;
@@ -496,6 +502,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
+            var suppressed = 0;
+
+            void AddRow(BuildDiagnosticRow row)
+            {
+                if (BuildDiagnostics.Count >= MaxVisibleBuildDiagnostics)
+                {
+                    suppressed++;
+                    return;
+                }
+
+                BuildDiagnostics.Add(row);
+            }
+
             var outputDirectory = Path.Combine(inspection.RootPath, "Assemblies");
             var outcome = await Task.Run(() =>
             {
@@ -521,12 +540,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             foreach (var problem in outcome.inputs.Problems)
             {
-                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+                AddRow(BuildDiagnosticRow.FromProblem(problem));
             }
 
             foreach (var problem in outcome.references.Problems)
             {
-                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+                AddRow(BuildDiagnosticRow.FromProblem(problem));
             }
 
             if (outcome.build is null)
@@ -534,7 +553,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 BuildStatus = outcome.inputs.Problems.FirstOrDefault()
                               ?? outcome.references.Problems.FirstOrDefault()
                               ?? "There was nothing to build.";
-                _log.Warning("Build", BuildStatus);
+
+                var blocked = BuildLogReport.Describe(
+                    outcome.inputs,
+                    outcome.references,
+                    build: null,
+                    referenceDirectory: installation.ManagedAssemblyDirectory);
+                _log.Warning("Build", blocked.Message, blocked.Detail);
+                OnPropertiesChanged(nameof(HasBuildDiagnostics));
                 return;
             }
 
@@ -542,13 +568,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 foreach (var diagnostic in unit.Compilation.Diagnostics)
                 {
-                    BuildDiagnostics.Add(BuildDiagnosticRow.FromDiagnostic(diagnostic, unit.AssemblyName));
+                    AddRow(BuildDiagnosticRow.FromDiagnostic(diagnostic, unit.AssemblyName));
                 }
             }
 
             foreach (var problem in outcome.build.Problems)
             {
-                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+                AddRow(BuildDiagnosticRow.FromProblem(problem));
             }
 
             foreach (var assembly in outcome.inspections)
@@ -574,19 +600,38 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
                 foreach (var problem in assembly.Problems)
                 {
-                    BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(problem));
+                    AddRow(BuildDiagnosticRow.FromProblem(problem));
                 }
             }
 
+            if (suppressed > 0)
+            {
+                BuildDiagnostics.Add(BuildDiagnosticRow.FromProblem(
+                    $"… {suppressed} more diagnostic(s) are not listed here; the log file records the build inputs, its reference set and the first diagnostics of each severity."));
+            }
+
+            // HasBuildDiagnostics was only raised when the list was cleared above, which is exactly when it is
+            // false: without this the diagnostics panel never became visible.
+            OnPropertiesChanged(nameof(HasBuildDiagnostics));
+
             BuildStatus = outcome.build.Summary;
+
+            // A build's summary is only a count ("1051 error(s)"), which is useless in a log file afterwards. The
+            // detail block carries the inputs, the reference set and the first diagnostics of each severity, so a
+            // failed build can be diagnosed from the log alone.
+            var report = BuildLogReport.Describe(
+                outcome.inputs,
+                outcome.references,
+                outcome.build,
+                installation.ManagedAssemblyDirectory);
 
             if (outcome.build.Succeeded)
             {
-                _log.Info("Build", outcome.build.Summary);
+                _log.Info("Build", report.Message, report.Detail);
             }
             else
             {
-                _log.Warning("Build", outcome.build.Summary);
+                _log.Warning("Build", report.Message, report.Detail);
             }
         }
         finally

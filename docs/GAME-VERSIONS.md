@@ -104,8 +104,17 @@ compiler invocation.
 - For the Unity/Mono layout nothing from the host runtime is added: a 1.6 installation ships `mscorlib` and
   `System` itself, and mixing a `net10.0` framework into a `net472` compile would be wrong.
 - Harmony is **not** referenced automatically. A mod that needs `0Harmony.dll` must declare a `HintPath` to it
-  (its own csproj normally already does), because which Harmony assembly matches a 1.6 or 1.7 install depends
-  on the Harmony mod version the author has.
+  (its own csproj normally already does) — or declare it as a `PackageReference`, which RimPulse resolves from
+  the **already restored** NuGet global packages folder (`NUGET_PACKAGES`, else `~/.nuget/packages`), choosing
+  `ref/` before `lib/` and the nearest compatible target framework. RimPulse never runs NuGet restore: a package
+  that is not restored, uses a floating version or a version range, or has no framework compatible with the
+  project is reported as a single problem instead of being guessed at.
+- The same simple assembly name is only referenced once. When a project and the installation both provide an
+  assembly, a platform assembly (`Assembly-CSharp`, `UnityEngine*`, `System*`, `mscorlib`, …) comes from the
+  installation and any other assembly (Harmony, a shared library) comes from the project. The choice is written
+  to the log, because a silent second copy makes Roslyn report `CS1703` and every shared type ambiguous.
+- A failed build records its inputs, reference set, first diagnostics and an error-code histogram in the log
+  (`BuildLogReport`); the summary line the app used to log alone only contained counts.
 - Mod assemblies are emitted to the mod's `Assemblies/` folder, which is where both versions load a mod's
   DLLs. Whether that folder is the only lookup path in 1.7 is part of open question 3 below.
 

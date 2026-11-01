@@ -82,6 +82,13 @@ This repository is being built incrementally, one milestone at a time. Features 
   assembly into the mod's `Assemblies` folder only when you press **Build** and only after compilation
   succeeded. The produced assembly is then read back from its metadata (name, version, references, types), so
   the build panel shows what the game would actually load.
+- Resolves `<PackageReference>` items from packages that are **already restored** in the NuGet global packages
+  folder, so a Harmony dependency declared as a package compiles; a package that is missing, uses a floating
+  version or is not compatible with the project's target framework is reported as one clear line instead of
+  hundreds of `CS0246` errors. A reference the project and the installation both provide is resolved to one
+  copy and reported, never silently duplicated.
+- Writes a build's **inputs, reference set, first diagnostics and error-code histogram** to the log, so a
+  failed build can be diagnosed from the log file alone (the summary line only carries counts).
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).

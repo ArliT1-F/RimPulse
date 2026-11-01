@@ -157,9 +157,26 @@ public static class ModCompiler
         }
 
         var references = new List<MetadataReference>();
-        foreach (var path in request.ReferencePaths.Distinct(StringComparer.OrdinalIgnoreCase))
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in request.ReferencePaths)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (!seenPaths.Add(path))
+            {
+                continue;
+            }
+
+            // Roslyn rejects two references with the same identity (CS1703) and then reports every shared type
+            // as ambiguous, so a duplicate simple name is dropped here as a last guard rather than compiled in.
+            var fileName = Path.GetFileName(path);
+            if (fileName.Length > 0 && !seenNames.Add(fileName))
+            {
+                problems.Add($"'{fileName}' is referenced more than once; only the first copy ('{path}') was used.");
+                continue;
+            }
 
             try
             {

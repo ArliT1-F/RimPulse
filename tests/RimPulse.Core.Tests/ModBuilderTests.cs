@@ -24,6 +24,27 @@ public sealed class ModBuilderTests
             TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// Compiles a small library with RimPulse's own compiler, so a reference-duplication test has two real
+    /// assemblies with the same simple name instead of a file that only looks like one.
+    /// </summary>
+    private static string CreateLibrary(TempDirectory temp, string assemblyName, string directory)
+    {
+        Directory.CreateDirectory(directory);
+
+        var source = temp.CreateFile(
+            $"libsrc/{assemblyName}/{assemblyName}.cs",
+            $"namespace {assemblyName}; public static class Marker {{ public const int Value = 1; }}");
+        var output = Path.Combine(directory, $"{assemblyName}.dll");
+
+        var result = ModCompiler.Compile(
+            new CompileRequest(assemblyName, [source], RuntimeReferences(), OutputPath: output),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Problems));
+        return output;
+    }
+
     [Fact]
     public void Build_WritesTheAssemblyIntoTheModsAssembliesFolder()
     {
@@ -129,5 +150,129 @@ public sealed class ModBuilderTests
         Assert.False(result.Succeeded);
         Assert.Empty(result.Units);
         Assert.Contains(result.Problems, problem => problem.Contains("No C# project", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_LetsAProjectReferenceReplaceTheInstallationsCopyOfALibrary()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod</AssemblyName>
+              </PropertyGroup>
+              <ItemGroup>
+                <Reference Include="Shared">
+                  <HintPath>lib/Shared.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "namespace TestMod; public static class Mod { }");
+
+        var installed = CreateLibrary(temp, "Shared", temp.Combine("Game", "Managed"));
+        var fromProject = CreateLibrary(temp, "Shared", temp.Combine("Source", "TestMod", "lib"));
+
+        var inputs = BuildInputDiscovery.Discover(temp.Root);
+        var result = ModBuilder.Build(
+            new ModBuildPlan(
+                inputs.Units,
+                [.. RuntimeReferences(), installed],
+                temp.Combine("Assemblies")),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Problems));
+        Assert.Equal(Path.GetFullPath(fromProject), Path.GetFullPath(Assert.Single(inputs.Units[0].ReferencePaths)));
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("Shared.dll", StringComparison.Ordinal)
+                       && problem.Contains("replaces the installation's copy", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_KeepsTheInstallationsCopyOfAGameAssembly()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod</AssemblyName>
+              </PropertyGroup>
+              <ItemGroup>
+                <Reference Include="Assembly-CSharp">
+                  <HintPath>lib/Assembly-CSharp.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "namespace TestMod; public static class Mod { }");
+
+        var installed = CreateLibrary(temp, "Assembly-CSharp", temp.Combine("Game", "Managed"));
+        CreateLibrary(temp, "Assembly-CSharp", temp.Combine("Source", "TestMod", "lib"));
+
+        var inputs = BuildInputDiscovery.Discover(temp.Root);
+        var result = ModBuilder.Build(
+            new ModBuildPlan(
+                inputs.Units,
+                [.. RuntimeReferences(), installed],
+                temp.Combine("Assemblies")),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Problems));
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("Assembly-CSharp.dll", StringComparison.Ordinal)
+                       && problem.Contains("the installation's copy is used", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_ReportsAnAssemblyProvidedTwiceByTheSameProject()
+    {
+        using var temp = new TempDirectory();
+        var first = CreateLibrary(temp, "Shared", temp.Combine("Source", "TestMod", "lib"));
+        var second = CreateLibrary(temp, "Shared", temp.Combine("Source", "TestMod", "lib2"));
+
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod</AssemblyName>
+              </PropertyGroup>
+              <ItemGroup>
+                <Reference Include="Shared">
+                  <HintPath>lib/Shared.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "namespace TestMod; public static class Mod { }");
+
+        var inputs = BuildInputDiscovery.Discover(temp.Root);
+        var unit = inputs.Units[0];
+        var duplicate = new ModCompileUnit(
+            unit.ProjectFilePath,
+            unit.ProjectDirectory,
+            unit.AssemblyName,
+            unit.TargetFramework,
+            unit.SourceFiles,
+            [.. unit.ReferencePaths, second],
+            unit.ProjectReferences,
+            unit.DefineConstants,
+            unit.LangVersion,
+            unit.AllowUnsafe,
+            unit.NullableEnabled);
+
+        var result = ModBuilder.Build(
+            new ModBuildPlan([duplicate], RuntimeReferences(), temp.Combine("Assemblies")),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Problems));
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("Shared.dll", StringComparison.Ordinal)
+                       && problem.Contains("is referenced twice by the project", StringComparison.Ordinal));
+        Assert.True(File.Exists(first));
     }
 }
