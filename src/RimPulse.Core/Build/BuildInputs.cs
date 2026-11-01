@@ -9,10 +9,10 @@ namespace RimPulse.Core.Build;
 /// </summary>
 /// <remarks>
 /// RimPulse evaluates the MSBuild subset a mod project actually uses — properties (including the nearest
-/// <c>Directory.Build.props</c> and the files a project imports), <c>Condition</c>s it understands and the
-/// <c>Configuration</c> it builds — and reports everything outside it: a condition it cannot evaluate, a
-/// wildcard pattern other than <c>*.cs</c> and <c>**/*.cs</c>, a package it cannot restore. A project that
-/// needs more than that is a known limitation, not a silent failure.
+/// <c>Directory.Build.props</c>, imported props files and caller-supplied global properties), understood
+/// <c>Condition</c>s, SDK default source inclusion and file globs — and reports everything outside it: a
+/// condition or item function it cannot evaluate, an unsupported item feature, or a package it cannot restore.
+/// A project that needs more than that is a known limitation, not a silent failure.
 /// </remarks>
 public sealed record ModCompileUnit(
     string ProjectFilePath,
@@ -51,6 +51,7 @@ public static class BuildInputDiscovery
 
     private const int MaxProjects = 16;
     private const int MaxDirectoryDepth = 6;
+    private const int MaxGlobTraversalDepth = 64;
 
     /// <param name="projectRoot">The mod directory to search for .csproj files.</param>
     /// <param name="assemblySearchDirectories">
@@ -58,9 +59,15 @@ public static class BuildInputDiscovery
     /// machine, normally the selected game's managed folder. A project that points at another machine's
     /// installation would otherwise fail over a file RimPulse already has.
     /// </param>
+    /// <param name="globalProperties">
+    /// Optional MSBuild global properties applied to every project, such as <c>RIMWORLD_DIR</c>,
+    /// <c>RimWorldDir</c>, <c>RIMWORLD_MANAGED_DIR</c> and <c>RimWorldManagedDir</c> for the selected game.
+    /// These take precedence over environment variables and project-defined values.
+    /// </param>
     public static BuildInputInspection Discover(
         string projectRoot,
-        IReadOnlyList<string>? assemblySearchDirectories = null)
+        IReadOnlyList<string>? assemblySearchDirectories = null,
+        IReadOnlyDictionary<string, string>? globalProperties = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
 
@@ -113,7 +120,7 @@ public static class BuildInputDiscovery
 
         foreach (var projectFile in projectFiles)
         {
-            var unit = ReadUnit(projectFile, searchDirectories, problems);
+            var unit = ReadUnit(projectFile, searchDirectories, globalProperties, problems);
             if (unit is not null)
             {
                 units.Add(unit);
@@ -150,6 +157,7 @@ public static class BuildInputDiscovery
     private static ModCompileUnit? ReadUnit(
         string projectFile,
         IReadOnlyList<string> assemblySearchDirectories,
+        IReadOnlyDictionary<string, string>? globalProperties,
         List<string> problems)
     {
         XDocument document;
@@ -188,8 +196,9 @@ public static class BuildInputDiscovery
         var displayName = Path.GetFileName(projectFile);
 
         // Properties are evaluated before the items that use them, so a hint path written as
-        // '$(RimWorldManagedDir)/Assembly-CSharp.dll' is a real path by the time it is read.
-        var properties = MsBuildPropertySet.Evaluate(projectFile, problems);
+        // '$(RimWorldManagedDir)/Assembly-CSharp.dll' is a real path by the time it is read. The selected game's
+        // paths are supplied as global properties, so projects written for another machine still use this install.
+        var properties = MsBuildPropertySet.Evaluate(projectFile, problems, globalProperties);
 
         string? GetProperty(string name)
         {
@@ -197,27 +206,29 @@ public static class BuildInputDiscovery
             return string.IsNullOrEmpty(value) ? null : value;
         }
 
+        IEnumerable<XElement> ProjectItems(string name)
+            => Items(root, name, properties, displayName, problems);
+
         var assemblyName = GetProperty("AssemblyName")
                            ?? Path.GetFileNameWithoutExtension(projectFile);
 
+        var sdkStyle = root.Attribute("Sdk") is not null
+                       || root.Elements().Any(element => element.Name.LocalName == "Sdk"
+                                                        || (element.Name.LocalName == "Import"
+                                                            && element.Attribute("Sdk") is not null));
+        var implicitCompileItemsEnabled = !string.Equals(
+            GetProperty("EnableDefaultCompileItems"), "false", StringComparison.OrdinalIgnoreCase);
         var sources = new SortedSet<string>(StringComparer.Ordinal);
-        var explicitCompileItems = Items(root, "Compile")
+        var compileItems = ProjectItems("Compile").ToArray();
+        var explicitCompileItems = compileItems
             .Where(item => item.Attribute("Include") is not null
                            && properties.EvaluateCondition(item, displayName, problems))
             .ToArray();
 
-        foreach (var item in explicitCompileItems)
-        {
-            var include = properties.Expand(item.Attribute("Include")!.Value);
-
-            foreach (var file in Expand(include, directory, displayName, problems))
-            {
-                sources.Add(file);
-            }
-        }
-
-        // SDK-style projects list no <Compile> items at all: the sources are every .cs under the project.
-        if (explicitCompileItems.Length == 0)
+        // SDK projects include their own .cs files by default even when they also explicitly include linked
+        // source trees. Legacy projects have no SDK defaults, so preserve the fallback for projects whose items
+        // are supplied through an import RimPulse cannot otherwise enumerate.
+        if (sdkStyle ? implicitCompileItemsEnabled : explicitCompileItems.Length == 0)
         {
             foreach (var file in EnumerateSourceFiles(directory))
             {
@@ -225,7 +236,24 @@ public static class BuildInputDiscovery
             }
         }
 
-        foreach (var item in Items(root, "Compile").Where(item => item.Attribute("Remove") is not null))
+        foreach (var item in explicitCompileItems)
+        {
+            var include = properties.Expand(item.Attribute("Include")!.Value);
+            var excludedFiles = item.Attribute("Exclude") is { } excludeAttribute
+                ? Expand(properties.Expand(excludeAttribute.Value), directory, displayName, problems)
+                    .ToHashSet(StringComparer.Ordinal)
+                : null;
+
+            foreach (var file in Expand(include, directory, displayName, problems))
+            {
+                if (excludedFiles is null || !excludedFiles.Contains(file))
+                {
+                    sources.Add(file);
+                }
+            }
+        }
+
+        foreach (var item in compileItems.Where(item => item.Attribute("Remove") is not null))
         {
             if (!properties.EvaluateCondition(item, displayName, problems))
             {
@@ -245,7 +273,7 @@ public static class BuildInputDiscovery
         targetFramework = string.IsNullOrWhiteSpace(targetFramework) ? null : targetFramework.Trim();
 
         var references = new List<string>();
-        foreach (var item in Items(root, "Reference"))
+        foreach (var item in ProjectItems("Reference"))
         {
             if (!properties.EvaluateCondition(item, displayName, problems))
             {
@@ -272,7 +300,7 @@ public static class BuildInputDiscovery
         // A PackageReference is not resolved by MSBuild here: RimPulse cannot run NuGet restore. Packages that are
         // already restored on this machine are read from the global packages folder; the rest are reported, so a
         // missing Harmony (or any other package) shows up as one clear line instead of hundreds of CS0246 errors.
-        foreach (var item in Items(root, "PackageReference"))
+        foreach (var item in ProjectItems("PackageReference"))
         {
             var declaredId = item.Attribute("Include")?.Value;
             if (string.IsNullOrWhiteSpace(declaredId))
@@ -324,7 +352,7 @@ public static class BuildInputDiscovery
         }
 
         var projectReferences = new List<string>();
-        foreach (var item in Items(root, "ProjectReference"))
+        foreach (var item in ProjectItems("ProjectReference"))
         {
             if (!properties.EvaluateCondition(item, displayName, problems))
             {
@@ -398,59 +426,278 @@ public static class BuildInputDiscovery
     }
 
     /// <summary>
-    /// Expands the two wildcard shapes RimPulse understands, plus literal paths. Anything else is reported:
-    /// evaluating arbitrary MSBuild globs would be guessing.
+    /// Expands literal paths and MSBuild-style path globs. A glob can use <c>*</c> and <c>?</c> within a path
+    /// segment and <c>**</c> as a complete segment to recurse through directories. Semicolon-separated item
+    /// specifications are expanded independently.
     /// </summary>
     private static IEnumerable<string> Expand(string pattern, string directory, string projectName, List<string> problems)
     {
-        var trimmed = pattern.Trim().Replace('\\', '/');
+        foreach (var itemSpec in pattern.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            foreach (var file in ExpandItemSpec(itemSpec, directory, projectName, problems))
+            {
+                yield return file;
+            }
+        }
+    }
 
-        if (trimmed.Length == 0)
+    private static IEnumerable<string> ExpandItemSpec(
+        string pattern,
+        string directory,
+        string projectName,
+        List<string> problems)
+    {
+        var normalized = pattern.Trim().Replace('\\', '/');
+        if (normalized.Length == 0)
         {
             yield break;
         }
 
-        if (trimmed is "*.cs" or "**/*.cs")
+        var wildcardIndex = normalized.IndexOf('*');
+        var questionIndex = normalized.IndexOf('?');
+        if (wildcardIndex < 0 || (questionIndex >= 0 && questionIndex < wildcardIndex))
         {
-            var search = trimmed is "*.cs" ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories;
-            string[] files;
+            wildcardIndex = questionIndex;
+        }
 
-            try
+        if (wildcardIndex < 0)
+        {
+            var resolved = ResolveRelativePath(directory, normalized);
+            if (resolved is null)
             {
-                files = Directory.GetFiles(directory, "*.cs", search);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                problems.Add($"{projectName}: could not expand '{pattern}': {ex.Message}");
+                problems.Add($"{projectName}: the item path '{pattern}' could not be resolved.");
                 yield break;
             }
 
-            foreach (var file in files.Order(StringComparer.Ordinal))
+            yield return resolved;
+            yield break;
+        }
+
+        var lastSeparator = normalized.LastIndexOf('/', wildcardIndex);
+        var searchDirectory = lastSeparator < 0
+            ? "."
+            : lastSeparator == 0
+                ? "/"
+                : normalized[..lastSeparator];
+        var glob = normalized[(lastSeparator + 1)..];
+
+        // Keep a Windows drive root absolute when the pattern starts with a wildcard below it (C:/**/*.cs).
+        if (lastSeparator == 2 && normalized.Length > 2 && normalized[1] == ':')
+        {
+            searchDirectory = normalized[..(lastSeparator + 1)];
+        }
+
+        var root = ResolveRelativePath(directory, searchDirectory);
+        if (root is null)
+        {
+            problems.Add($"{projectName}: the item pattern '{pattern}' could not be resolved.");
+            yield break;
+        }
+
+        // A glob in a directory that is not present matches no files, as it does in MSBuild.
+        if (!Directory.Exists(root))
+        {
+            yield break;
+        }
+
+        var segments = glob.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+        {
+            yield break;
+        }
+
+        foreach (var file in ExpandGlob(root, segments, pattern, projectName, problems))
+        {
+            yield return file;
+        }
+    }
+
+    private static IEnumerable<string> ExpandGlob(
+        string root,
+        IReadOnlyList<string> segments,
+        string originalPattern,
+        string projectName,
+        List<string> problems)
+    {
+        var pathComparer = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var visitedDirectories = new HashSet<string>(pathComparer);
+        var depthProblemReported = false;
+
+        foreach (var file in EnumerateFiles(root, 0))
+        {
+            var relativePath = Path.GetRelativePath(root, file).Replace('\\', '/');
+            var pathSegments = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (MatchesGlobPath(segments, pathSegments))
             {
-                if (!file.Split(Path.DirectorySeparatorChar).Any(IgnoredDirectoryNames.Contains))
-                {
-                    yield return Path.GetFullPath(file);
-                }
+                yield return Path.GetFullPath(file);
+            }
+        }
+
+        IEnumerable<string> EnumerateFiles(string currentDirectory, int depth)
+        {
+            if (depth > MaxGlobTraversalDepth)
+            {
+                ReportDepthLimit();
+                yield break;
             }
 
-            yield break;
+            var fullDirectory = Path.GetFullPath(currentDirectory);
+            if (!visitedDirectories.Add(fullDirectory))
+            {
+                yield break;
+            }
+
+            foreach (var file in ReadEntries(fullDirectory, directories: false))
+            {
+                yield return file;
+            }
+
+            foreach (var child in ReadEntries(fullDirectory, directories: true))
+            {
+                if (IgnoredDirectoryNames.Contains(Path.GetFileName(child)) || IsReparsePoint(child))
+                {
+                    continue;
+                }
+
+                foreach (var file in EnumerateFiles(child, depth + 1))
+                {
+                    yield return file;
+                }
+            }
         }
 
-        if (trimmed.Contains('*') || trimmed.Contains('?'))
+        string[] ReadEntries(string currentDirectory, bool directories)
         {
-            problems.Add($"{projectName}: the item pattern '{pattern}' uses a wildcard RimPulse does not evaluate; it was ignored.");
-            yield break;
+            try
+            {
+                var entries = directories
+                    ? Directory.EnumerateDirectories(currentDirectory)
+                    : Directory.EnumerateFiles(currentDirectory);
+                return entries.Order(StringComparer.Ordinal).ToArray();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ReportEnumerationFailure(currentDirectory, ex);
+                return [];
+            }
         }
 
-        var resolved = ResolveRelativePath(directory, trimmed);
-        if (resolved is null)
+        bool IsReparsePoint(string path)
         {
-            problems.Add($"{projectName}: the item path '{pattern}' could not be resolved.");
-            yield break;
+            try
+            {
+                return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                ReportEnumerationFailure(path, ex);
+                return true;
+            }
         }
 
-        yield return resolved;
+        void ReportEnumerationFailure(string path, Exception exception)
+        {
+            var problem = $"{projectName}: could not expand '{originalPattern}' at '{path}': {exception.Message}";
+            if (!problems.Contains(problem, StringComparer.Ordinal))
+            {
+                problems.Add(problem);
+            }
+        }
+
+        void ReportDepthLimit()
+        {
+            if (depthProblemReported)
+            {
+                return;
+            }
+
+            depthProblemReported = true;
+            problems.Add(
+                $"{projectName}: the item pattern '{originalPattern}' descends more than {MaxGlobTraversalDepth} " +
+                "directories; deeper matches were skipped.");
+        }
     }
+
+    private static bool MatchesGlobPath(IReadOnlyList<string> patternSegments, IReadOnlyList<string> pathSegments)
+    {
+        var outcomes = new Dictionary<(int Pattern, int Path), bool>();
+        return Match(0, 0);
+
+        bool Match(int patternIndex, int pathIndex)
+        {
+            if (outcomes.TryGetValue((patternIndex, pathIndex), out var cached))
+            {
+                return cached;
+            }
+
+            bool result;
+            if (patternIndex == patternSegments.Count)
+            {
+                result = pathIndex == pathSegments.Count;
+            }
+            else if (patternSegments[patternIndex] == "**")
+            {
+                // ** matches zero or more complete path segments.
+                result = Match(patternIndex + 1, pathIndex)
+                         || (pathIndex < pathSegments.Count && Match(patternIndex, pathIndex + 1));
+            }
+            else
+            {
+                result = pathIndex < pathSegments.Count
+                         && MatchesGlobSegment(patternSegments[patternIndex], pathSegments[pathIndex])
+                         && Match(patternIndex + 1, pathIndex + 1);
+            }
+
+            outcomes[(patternIndex, pathIndex)] = result;
+            return result;
+        }
+    }
+
+    private static bool MatchesGlobSegment(string pattern, string value)
+    {
+        var ignoreCase = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+        var patternIndex = 0;
+        var valueIndex = 0;
+        var starIndex = -1;
+        var starMatchIndex = -1;
+
+        while (valueIndex < value.Length)
+        {
+            if (patternIndex < pattern.Length
+                && (pattern[patternIndex] == '?'
+                    || CharactersEqual(pattern[patternIndex], value[valueIndex], ignoreCase)))
+            {
+                patternIndex++;
+                valueIndex++;
+            }
+            else if (patternIndex < pattern.Length && pattern[patternIndex] == '*')
+            {
+                starIndex = patternIndex++;
+                starMatchIndex = valueIndex;
+            }
+            else if (starIndex >= 0)
+            {
+                patternIndex = starIndex + 1;
+                valueIndex = ++starMatchIndex;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        while (patternIndex < pattern.Length && pattern[patternIndex] == '*')
+        {
+            patternIndex++;
+        }
+
+        return patternIndex == pattern.Length;
+    }
+
+    private static bool CharactersEqual(char left, char right, bool ignoreCase)
+        => left == right || (ignoreCase && char.ToUpperInvariant(left) == char.ToUpperInvariant(right));
 
     private static string? ResolveRelativePath(string directory, string path)
     {
@@ -564,11 +811,26 @@ public static class BuildInputDiscovery
         return false;
     }
 
-    private static IEnumerable<XElement> Items(XElement root, string name)
-        => root.Elements()
-            .Where(element => element.Name.LocalName == "ItemGroup")
-            .SelectMany(group => group.Elements())
-            .Where(element => element.Name.LocalName == name);
+    private static IEnumerable<XElement> Items(
+        XElement root,
+        string name,
+        MsBuildPropertySet properties,
+        string projectName,
+        List<string> problems)
+    {
+        foreach (var group in root.Elements().Where(element => element.Name.LocalName == "ItemGroup"))
+        {
+            if (!properties.EvaluateCondition(group, projectName, problems))
+            {
+                continue;
+            }
+
+            foreach (var item in group.Elements().Where(element => element.Name.LocalName == name))
+            {
+                yield return item;
+            }
+        }
+    }
 
     /// <summary>Puts referenced projects before their dependents; a cycle is reported and kept stable.</summary>
     private static IReadOnlyList<ModCompileUnit> OrderByProjectReference(

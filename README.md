@@ -166,15 +166,20 @@ listed with file, line and column. `DEBUG` and `TRACE` are defined, matching a d
 RimPulse evaluates the part of MSBuild a mod project actually uses, and properties are evaluated before the
 items that read them. In MSBuild's order: the properties MSBuild itself provides (`Configuration` is `Debug`,
 `Platform` is `AnyCPU`), the environment, the nearest `Directory.Build.props`, the files the project
-`Import`s, and then every `PropertyGroup` in document order. A hint path written as
-`$(RimWorldManagedDir)/Assembly-CSharp.dll` therefore resolves, including when that property lives in
-`Directory.Build.props` — the usual shape of a mod project that builds against a local game install.
+`Import`s, and then every `PropertyGroup` in document order. For each build, the selected installation is also
+passed as immutable MSBuild global properties: `RIMWORLD_DIR` / `RimWorldDir` point at the game root, and
+`RIMWORLD_MANAGED_DIR` / `RimWorldManagedDir` point at the assembly directory. These selected paths take
+precedence over a stale environment variable or project path written for another machine. A hint path written as
+`$(RimWorldManagedDir)/Assembly-CSharp.dll` therefore resolves, including when the property lives in
+`Directory.Build.props`.
 
 `Condition`s are evaluated as well, on property groups, properties, imports and items: `==`, `!=`, `<`, `>`,
-`<=`, `>=`, `and`, `or`, `!`, parentheses, and the `Exists()` and `HasTrailingSlash()` functions. The items
-read are `Compile` (literal paths, `*.cs` and `**/*.cs`), `Reference` with `HintPath`, `ProjectReference` and
-`PackageReference`. Other wildcards, item and string functions, `Choose` and MSBuild targets are not
-evaluated; anything ignored is reported with its file and condition rather than guessed at.
+`<=`, `>=`, `and`, `or`, `!`, parentheses, and the `Exists()` and `HasTrailingSlash()` functions. `Compile`
+items include SDK-style default source discovery and explicit literal paths or MSBuild-style globs (`*` and
+`?` within a path segment, and `**` as a recursive path segment), including relative paths, semicolon-separated
+patterns, `Exclude` and `Remove`. `Reference` with `HintPath`, `ProjectReference` and `PackageReference` are
+read too. Item/string functions, `Choose` and MSBuild targets are not evaluated; anything ignored is reported
+rather than guessed at.
 
 Every piece of text in the window is selectable: drag to select and press Ctrl+C, including compiler
 diagnostics, paths and log lines. **Copy all errors** next to **Build mod** copies the complete diagnostic

@@ -106,6 +106,153 @@ public sealed class BuildInputDiscoveryTests
     }
 
     [Fact]
+    public void Discover_ExpandsRelativeGlobsAndKeepsSdkDefaultSources()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Tests/PowerGridManager.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <Compile Include="../Source/PowerGridManager/**/*.cs" />
+                <Compile Include="Doubles/*.cs" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Tests/CompatibilityTests.cs", "// sdk default source");
+        temp.CreateFile("Tests/Other/ForecastTests.cs", "// sdk default nested source");
+        temp.CreateFile("Tests/Doubles/VerseDoubles.cs", "// wildcard source");
+        temp.CreateFile("Tests/obj/GeneratedTests.cs", "// excluded build output");
+        temp.CreateFile("Source/PowerGridManager/PowerGridManagerMod.cs", "// linked source");
+        temp.CreateFile("Source/PowerGridManager/Monitoring/PowerGridScanner.cs", "// nested linked source");
+        temp.CreateFile("Source/PowerGridManager/obj/Generated.cs", "// excluded build output");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        var files = unit.SourceFiles
+            .Select(file => Path.GetRelativePath(temp.Root, file).Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.Equal(5, files.Count);
+        Assert.Contains("Tests/CompatibilityTests.cs", files);
+        Assert.Contains("Tests/Other/ForecastTests.cs", files);
+        Assert.Contains("Tests/Doubles/VerseDoubles.cs", files);
+        Assert.Contains("Source/PowerGridManager/PowerGridManagerMod.cs", files);
+        Assert.Contains("Source/PowerGridManager/Monitoring/PowerGridScanner.cs", files);
+        Assert.DoesNotContain(files, file => file.Contains("/obj/", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Problems, problem => problem.Contains("wildcard", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Discover_ExpandsProjectRelativeGlobWhenSdkDefaultsAreDisabled()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Tests/Mod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+              </PropertyGroup>
+              <ItemGroup>
+                <Compile Include="Doubles/*.cs;Shared/*.cs" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Tests/Doubles/PowerDoubles.cs", "// selected glob source");
+        temp.CreateFile("Tests/Doubles/Helper.g.cs", "// selected glob source");
+        temp.CreateFile("Tests/Shared/Shared.cs", "// second semicolon-separated glob");
+        temp.CreateFile("Tests/NotIncluded.cs", "// SDK defaults are disabled");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        var fileNames = unit.SourceFiles.Select(path => Path.GetFileName(path)!).ToArray();
+        Assert.Equal(new[] { "Helper.g.cs", "PowerDoubles.cs", "Shared.cs" }, fileNames);
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
+    public void Discover_AppliesCompileExcludeAndRemoveGlobs()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Tests/Mod.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <Compile Include="../Linked/**/*.cs" Exclude="../Linked/Generated/**/*.cs" />
+                <Compile Remove="Doubles/Obsolete*.cs" />
+              </ItemGroup>
+              <ItemGroup Condition="'$(Configuration)' == 'Release'">
+                <Compile Include="../Conditional/ReleaseOnly.cs" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Tests/Local.cs", "// sdk default source");
+        temp.CreateFile("Tests/Doubles/Keep.cs", "// retained default source");
+        temp.CreateFile("Tests/Doubles/ObsoleteTest.cs", "// removed default source");
+        temp.CreateFile("Conditional/ReleaseOnly.cs", "// disabled item group");
+        temp.CreateFile("Linked/Core.cs", "// linked source");
+        temp.CreateFile("Linked/Generated/Generated.cs", "// excluded linked source");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        var files = unit.SourceFiles.Select(path => Path.GetFileName(path)).ToArray();
+        Assert.Equal(3, files.Length);
+        Assert.Contains("Local.cs", files);
+        Assert.Contains("Keep.cs", files);
+        Assert.Contains("Core.cs", files);
+        Assert.DoesNotContain("ObsoleteTest.cs", files);
+        Assert.DoesNotContain("ReleaseOnly.cs", files);
+        Assert.DoesNotContain("Generated.cs", files);
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
+    public void Discover_ResolvesInstallationPropertiesForHintPaths()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <RimWorldDir>/another-machine/RimWorld</RimWorldDir>
+                <RimWorldManagedDir>/another-machine/RimWorld/Managed</RimWorldManagedDir>
+              </PropertyGroup>
+              <ItemGroup>
+                <Compile Include="Main.cs" />
+                <Reference Include="Assembly-CSharp">
+                  <HintPath>$(RimWorldManagedDir)/Assembly-CSharp.dll</HintPath>
+                </Reference>
+                <Reference Include="UnityStubs">
+                  <HintPath>$(RIMWORLD_DIR)/UnityStubs.dll</HintPath>
+                </Reference>
+                <Reference Include="UnityEngine.CoreModule">
+                  <HintPath>$(RIMWORLD_MANAGED_DIR)/UnityEngine.CoreModule.dll</HintPath>
+                </Reference>
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Main.cs", "// main");
+        var gameRoot = temp.CreateDirectory("selected/RimWorld");
+        var managed = temp.CreateDirectory("selected/RimWorld/Managed");
+        var gameAssembly = temp.CreateFile("selected/RimWorld/Managed/Assembly-CSharp.dll", string.Empty);
+        var unityStubs = temp.CreateFile("selected/RimWorld/UnityStubs.dll", string.Empty);
+        var unityCore = temp.CreateFile("selected/RimWorld/Managed/UnityEngine.CoreModule.dll", string.Empty);
+        var globalProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["RIMWORLD_DIR"] = gameRoot,
+            ["RimWorldDir"] = gameRoot,
+            ["RIMWORLD_MANAGED_DIR"] = managed,
+            ["RimWorldManagedDir"] = managed,
+        };
+
+        var result = BuildInputDiscovery.Discover(temp.Root, [managed], globalProperties);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Empty(result.Problems);
+        Assert.Equal(
+            new[] { Path.GetFullPath(gameAssembly), Path.GetFullPath(unityStubs), Path.GetFullPath(unityCore) }
+                .Order(StringComparer.Ordinal),
+            unit.ReferencePaths.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Discover_ReadsLegacyCompileItemsAndHintPaths()
     {
         using var temp = new TempDirectory();
@@ -133,17 +280,19 @@ public sealed class BuildInputDiscoveryTests
         temp.CreateFile("Source/TestMod/Main.cs", "// main");
         temp.CreateFile("Source/TestMod/Utility/Helper.cs", "// helper");
         temp.CreateFile("Source/TestMod/Extra.cs", "// extra");
+        temp.CreateFile("Source/TestMod/Generated/Constants.g.cs", "// generated source");
         temp.CreateFile("RimWorld/Managed/Assembly-CSharp.dll", string.Empty);
 
         var result = BuildInputDiscovery.Discover(temp.Root);
 
         var unit = Assert.Single(result.Units);
         Assert.True(unit.NullableEnabled);
-        Assert.Equal(3, unit.SourceFiles.Count);
+        Assert.Equal(4, unit.SourceFiles.Count);
+        Assert.Contains(unit.SourceFiles, path => path.EndsWith("Generated/Constants.g.cs", StringComparison.Ordinal));
         Assert.Contains(unit.ReferencePaths, path => path.EndsWith("Assembly-CSharp.dll", StringComparison.Ordinal));
         Assert.DoesNotContain(unit.ReferencePaths, path => path.EndsWith("Missing.dll", StringComparison.Ordinal));
         Assert.Contains(result.Problems, problem => problem.Contains("Missing.dll", StringComparison.Ordinal));
-        Assert.Contains(result.Problems, problem => problem.Contains("wildcard", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.Problems, problem => problem.Contains("wildcard", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
