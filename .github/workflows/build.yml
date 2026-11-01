@@ -1,0 +1,27 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore RimPulse.slnx
+
+      - name: Build
+        run: dotnet build RimPulse.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test RimPulse.slnx -c Release
