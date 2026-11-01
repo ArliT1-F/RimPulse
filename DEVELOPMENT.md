@@ -143,17 +143,21 @@ Honest accounting of how the current code has been verified. Update this section
 
 | Area | Status | How it was verified |
 | --- | --- | --- |
-| C# syntax of all sources | Verified | Every `.cs` file parsed with a C# grammar: 0 syntax errors |
-| Credits catalog completeness | Verified by inspection | Every referenced repository, organisation and creator has a catalog entry; encoded as a test |
-| XAML / MSBuild / solution files | Verified (well-formed) | All 10 XML documents parsed successfully |
-| `dotnet build` of the solution | **Not run** | The environment used to write milestone 1 had no .NET SDK and no NuGet access |
-| `dotnet test` of the suite | **Not run** | Same reason. The tests are written against real behaviour and must be executed by you (§2) |
+| C# syntax of all sources | Verified | CI build compiles every project |
+| XAML / MSBuild / solution files | Verified | CI build compiles all AXAML (Avalonia XAML compiler); 0 errors |
+| `dotnet build` of the solution | **Passing** | GitHub Actions, Ubuntu + .NET 10 SDK, `-c Release`, 0 errors |
+| `dotnet test` of the suite | **Passing** | Same run: 99 tests, 0 failures |
+| Credits catalog completeness | Verified | Encoded as tests (`CreditsCatalogTests`) and re-checked on every push |
+| Opening the desktop window | **Not verified** | CI has no display server; verify locally with `dotnet run --project src/RimPulse.App` |
 | Installation detection against a real RimWorld 1.6 install | **Not verified** | Requires a machine with the game installed |
 | Installation detection against a real RimWorld 1.7 install | **Not verified** | Requires a machine with the game installed |
 | Runtime behaviour (launching the game, IPC, reload) | Not implemented | Milestones 4–6 |
 
-If `dotnet build` fails on your machine, please report the exact compiler output — that is the fastest way
-to close the gap above.
+The first CI run found a real defect (the rotating log sink left no active log file after a rotation) and a
+wrong test expectation (`shortVersion` was asserted as `1.6.4851` instead of `1.6`). Both are fixed.
+
+If a build fails on your machine but passes in CI, report your SDK version (`dotnet --info`) and the
+compiler output.
 
 ## 8. Credits and attribution
 
@@ -175,7 +179,20 @@ and honour the license; GPL-3.0 and unlicensed code must not be copied in withou
   implemented, it is absent and documented in [`docs/SPEC.md`](docs/SPEC.md)-driven milestone status.
 - New logic in Core requires tests. Tests use real temporary directories rather than a mocked filesystem.
 
-## 10. Next steps (milestone 2 and beyond)
+## 10. Continuous integration
+
+`.github/workflows/build.yml` restores, builds and tests the solution on every push and pull request
+(Ubuntu, .NET 10 SDK). The .NET 10 SDK requires opting into the new test experience, which `global.json` does:
+
+```json
+"test": { "runner": "Microsoft.Testing.Platform" }
+```
+
+Failing runs attach the tail of the build/test output as a commit comment, because raw job logs are not
+reachable from every environment that needs to read them. Remove that step if your team does not want the
+comment.
+
+## 11. Next steps (milestone 2 and beyond)
 
 1. **Mod project management** — `IRimWorldProjectStore`, `About.xml` parsing (`packageId`, `name`, `author`,
    `supportedVersions`, `modDependencies`), `LoadFolders.xml` awareness for 1.6/1.7 content folders,

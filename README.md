@@ -47,6 +47,7 @@ working unless it is implemented and covered by a test.
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
+- Is covered by 99 automated tests that build and pass in CI on every push.
 
 ### Deliberately not there yet
 
@@ -177,14 +178,19 @@ RimPulse without an explicit licensing decision.
 
 ## Verification status
 
-Honesty matters more than a green checkmark:
+Honesty matters more than a green checkmark. Current state, on Ubuntu with the .NET 10 SDK (GitHub Actions):
 
-- The C# sources in this repository were **not compiled or executed** in the environment where milestone 1
-  was written: that sandbox had no .NET SDK and no NuGet access. Every `.cs` file was parsed with a C#
-  grammar (no syntax errors) and the XML/AXAML files were validated as well-formed, but semantic
-  verification — `dotnet build` and `dotnet test` — must be run on a machine with the .NET 10 SDK.
-- The test suite is written against the real behaviour of the code (temporary directories, fake Steam
-  libraries, fake Unity and Waylith installs). See [`DEVELOPMENT.md`](DEVELOPMENT.md#verification-status)
-  for the current, honest status of each area.
-- Nothing in milestone 1 requires RimWorld to be installed, so the suite is fully runnable on any
-  development machine.
+| Check | Result |
+| --- | --- |
+| `dotnet build RimPulse.slnx -c Release` | **Passing** — 0 errors; Core, the Avalonia app and all XAML compile |
+| `dotnet test RimPulse.slnx -c Release` | **Passing** — 99 tests, 0 failures |
+| Opening the window on a real desktop | **Not verified** — CI has no display server; run `dotnet run --project src/RimPulse.App` locally |
+| Detection against a real RimWorld 1.6 / 1.7 install | **Not verified** — needs a machine with the game |
+| Windows / macOS runtime behaviour | **Not verified** — path handling is unit tested for all three platforms |
+
+The first CI run earned its keep: it found a real defect (the log sink left no active log file after a
+rotation, which would break `tail -f`) and one wrong test expectation — both fixed. Only green-that-is-true
+counts here.
+
+Nothing in milestone 1 requires RimWorld to be installed, so the suite runs on any development machine; see
+[`DEVELOPMENT.md`](DEVELOPMENT.md#verification-status).
