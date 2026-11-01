@@ -49,8 +49,9 @@ public sealed class ProjectRow : ObservableObject
 
     private static string DirectoryName(string path)
     {
-        var trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var name = Path.GetFileName(trimmed);
+        // The instance property Path shadows System.IO.Path inside this type, so qualify it.
+        var trimmed = path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        var name = System.IO.Path.GetFileName(trimmed);
         return string.IsNullOrWhiteSpace(name) ? path : name;
     }
 }
