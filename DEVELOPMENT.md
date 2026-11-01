@@ -143,10 +143,10 @@ Honest accounting of how the current code has been verified. Update this section
 
 | Area | Status | How it was verified |
 | --- | --- | --- |
-| C# syntax of all sources | Verified | CI build compiles every project |
-| XAML / MSBuild / solution files | Verified | CI build compiles all AXAML (Avalonia XAML compiler); 0 errors |
-| `dotnet build` of the solution | **Passing** | GitHub Actions, Ubuntu + .NET 10 SDK, `-c Release`, 0 errors |
-| `dotnet test` of the suite | **Passing** | Same run: 99 tests, 0 failures |
+| C# syntax of all sources | **Not yet verified** | The foundation passed CI; project inspection and monitoring changes need a new build |
+| XAML / MSBuild / solution files | **Not yet verified** | Foundation AXAML passed CI; the new project tab needs a new build |
+| `dotnet build` of the solution | **Not yet verified** | The foundation passed in GitHub Actions; changes need a fresh run |
+| `dotnet test` of the suite | **Not yet verified** | The foundation passed 99 tests; new project, monitoring and XML tests need a fresh run |
 | Credits catalog completeness | Verified | Encoded as tests (`CreditsCatalogTests`) and re-checked on every push |
 | Opening the desktop window | **Not verified** | CI has no display server; verify locally with `dotnet run --project src/RimPulse.App` |
 | Installation detection against a real RimWorld 1.6 install | **Not verified** | Requires a machine with the game installed |
@@ -194,10 +194,10 @@ comment.
 
 ## 11. Next steps (milestone 2 and beyond)
 
-1. **Mod project management** — `IRimWorldProjectStore`, `About.xml` parsing (`packageId`, `name`, `author`,
-   `supportedVersions`, `modDependencies`), `LoadFolders.xml` awareness for 1.6/1.7 content folders,
-   multiple projects persisted in the configuration.
-2. **File monitoring** — `FileSystemWatcher` per project with debouncing/batching and change classification
-   (C# / XML / texture / audio / About.xml / language / other).
-3. Then milestone 3 (Roslyn build + XML validation) before any runtime work, because the runtime needs a
-   trustworthy build result to reload.
+1. **Mod project management** — single-directory selection and metadata/folder inspection are in progress.
+   Still needed: multiple persisted projects, dependency resolution and interpretation of `LoadFolders.xml`
+   for 1.6/1.7 content folders.
+2. **File monitoring** — single selected project monitoring, debouncing and classification are implemented;
+   monitoring multiple projects remains. Notifications are best-effort; errors require a manual refresh.
+3. **Build and validation** — changed XML is checked for well-formedness only; full validation, Roslyn
+   compilation and reference resolution remain before runtime work can rely on a trustworthy build result.

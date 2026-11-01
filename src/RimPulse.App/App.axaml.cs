@@ -24,7 +24,11 @@ public partial class App : Application
                 var viewModel = _services.CreateMainWindowViewModel();
 
                 desktop.MainWindow = new MainWindow { DataContext = viewModel };
-                desktop.Exit += (_, _) => _services?.Dispose();
+                desktop.Exit += (_, _) =>
+                {
+                    viewModel.Dispose();
+                    _services?.Dispose();
+                };
 
                 // Fire and forget: InitializeAsync handles its own errors and never throws.
                 _ = viewModel.InitializeAsync();
