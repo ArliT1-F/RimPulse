@@ -127,8 +127,12 @@ compiler invocation.
   to the log, because a silent second copy makes Roslyn report `CS1703` and every shared type ambiguous.
 - A failed build records its inputs, reference set, first diagnostics and an error-code histogram in the log
   (`BuildLogReport`); the summary line the app used to log alone only contained counts.
-- Mod assemblies are emitted to the mod's `Assemblies/` folder, which is where both versions load a mod's
-  DLLs. Whether that folder is the only lookup path in 1.7 is part of open question 3 below.
+- Mod assemblies are emitted to an `Assemblies/` folder that the selected version actually loads, which is
+  where both versions read a mod's DLLs: `<mod>/Assemblies/` when `LoadFolders.xml` loads `/` (or is absent), and
+  the version folder's `Assemblies/` (for example `1.6/Assemblies/`) when the section for that version loads
+  `1.6` and not the root. Writing to the root in that layout produces no error anywhere — the game simply never
+  loads the DLL — so the folder is resolved from `LoadFolders.xml` (`ModOutputLayout`) and shown with its
+  evidence. Whether the folder is the only lookup path in 1.7 is part of open question 3 below.
 
 ### Assembly reload (milestone 6) — the hard problem
 

@@ -122,5 +122,22 @@ public sealed class BuildLogReportTests
         Assert.Contains("Warnings: 1", summary.Detail!, StringComparison.Ordinal);
         Assert.Contains("Mod.cs:7:20 warning CS0169", summary.Detail!, StringComparison.Ordinal);
         Assert.DoesNotContain("Hint: CS0246", summary.Detail!, StringComparison.Ordinal);
+
+        // Where the DLL went is part of the record: a build that writes to a folder the game does not load
+        // produces no error anywhere, so the log has to show the path it chose.
+        Assert.Contains("Output: 1 assembly(ies) written", summary.Detail!, StringComparison.Ordinal);
+        Assert.Contains("/mod/Assemblies/TestMod.dll", summary.Detail!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Describe_RecordsThatNothingWasWritten()
+    {
+        var unit = Unit();
+        var compilation = new CompilationResult(true, null, null, [], [], TimeSpan.FromSeconds(1));
+        var build = new ModBuildResult(true, [new BuildUnitResult(unit, compilation)], [], [], TimeSpan.FromSeconds(1));
+
+        var summary = BuildLogReport.Describe(new BuildInputInspection([unit], []), References(), build, null);
+
+        Assert.Contains("Output: nothing was written", summary.Detail!, StringComparison.Ordinal);
     }
 }

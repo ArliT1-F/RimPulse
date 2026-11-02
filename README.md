@@ -164,10 +164,20 @@ not invent a folder list for that version.
 ### Building the mod
 
 **Build mod** compiles the mod's C# projects against the selected installation and writes the resulting
-assemblies into the mod's `Assemblies` folder — the only place RimPulse ever writes inside a mod directory, and
-only as a direct result of pressing the button. Projects are compiled in dependency order, so a referenced
-project is built first and the projects that reference it are linked against that output. Diagnostics are
-listed with file, line and column. `DEBUG` and `TRACE` are defined, matching a development build.
+assemblies into an `Assemblies` folder — the only place RimPulse ever writes inside a mod directory, and only as
+a direct result of pressing the button. Projects are compiled in dependency order, so a referenced project is
+built first and the projects that reference it are linked against that output. Diagnostics are listed with file,
+line and column. `DEBUG` and `TRACE` are defined, matching a development build.
+
+The `Assemblies` folder is chosen from `LoadFolders.xml`, because that is what decides whether the game loads the
+output at all: a mod with the flat layout (no `LoadFolders.xml`, or a section that loads `/`) is built into
+`<mod>/Assemblies`, while a mod that ships version folders (`1.6/Defs`, `1.6/Assemblies`, …) is built into the
+folder that section loads for the selected version — normally `1.6/Assemblies`. RimPulse names the folder it will
+write to, states the evidence in one line, and shows the folder again in the build result. Two mistakes are
+reported instead of being made silently: assemblies left in a root `Assemblies` folder the current version does
+not load (the game ignores them, which looks like a mod with no code), and a second loaded folder that already
+holds assemblies. When the load folders cannot be determined — no `LoadFolders.xml` section for the selected
+version, or an installation without a confirmed version — the root is used and the uncertainty is reported.
 
 RimPulse evaluates the part of MSBuild a mod project actually uses, and properties are evaluated before the
 items that read them. In MSBuild's order: the properties MSBuild itself provides (`Configuration` is `Debug`,
