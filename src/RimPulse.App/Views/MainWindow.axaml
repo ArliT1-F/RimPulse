@@ -218,13 +218,30 @@
         </TabItem>
         <TabItem Header="Runtime">
           <Border Classes="panel" Margin="0,12,0,0">
-            <StackPanel Spacing="12">
-              <SelectableTextBlock Text="GAME PROCESS" Classes="section" />
-              <SelectableTextBlock Text="Launch the selected Linux installation normally. RimPulse does not configure mods or connect to the game yet." Classes="caption" TextWrapping="Wrap" />
-              <Button Content="Launch RimWorld" Classes="accent" HorizontalAlignment="Left" Command="{Binding LaunchGameCommand}" />
-              <SelectableTextBlock Text="{Binding RuntimeStatus}" Classes="body" TextWrapping="Wrap" />
-              <SelectableTextBlock Text="Close the game normally to save your progress. Closing RimPulse leaves the game running. Process status does not indicate that the game or any mod has finished loading." Classes="caption" TextWrapping="Wrap" />
-            </StackPanel>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <StackPanel Spacing="12">
+                <SelectableTextBlock Text="GAME PROCESS &amp; COMPANION" Classes="section" />
+                <SelectableTextBlock Text="Setup is opt-in. Install creates a symbolic link in the selected game's Mods folder; linking a project does the same without changing the project itself. Reinstall the companion after a game update before an isolated launch." Classes="caption" TextWrapping="Wrap" />
+                <WrapPanel Orientation="Horizontal">
+                  <Button Content="Install companion link" Classes="quiet" Margin="0,0,8,8" Command="{Binding InstallCompanionCommand}" />
+                  <Button Content="Link selected project" Classes="quiet" Margin="0,0,8,8" Command="{Binding LinkDevelopmentProjectCommand}" />
+                </WrapPanel>
+                <SelectableTextBlock Text="{Binding RuntimeSetupStatus}" Classes="caption" TextWrapping="Wrap" />
+                <WrapPanel Orientation="Horizontal">
+                  <Button Content="Launch RimWorld normally" Classes="quiet" Margin="0,0,8,8" Command="{Binding LaunchGameCommand}" />
+                  <Button Content="Launch isolated development" Classes="accent" Margin="0,0,8,8" Command="{Binding LaunchDevelopmentCommand}" />
+                </WrapPanel>
+                <SelectableTextBlock Text="Experimental: isolated launch creates a NEW retained save/config profile with Core, the companion and the selected project. Link the project first if needed. RimPulse does not resolve dependencies or enable DLC; the game may enable newly discovered expansions. This is not a sandbox: logs, preferences and mods may still use shared files. Real-game behavior needs verification." Classes="caption" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="{Binding RuntimeStatus}" Classes="body" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="{Binding CompanionStatus}" Classes="body" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="{Binding RuntimeProjectStatus}" Classes="body" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="LOADED MODS — STARTUP SNAPSHOT" Classes="section" Margin="0,8,0,0" />
+                <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                  <SelectableTextBlock Text="{Binding RuntimeModsText}" Classes="caption mono" />
+                </ScrollViewer>
+                <SelectableTextBlock Text="A connected companion reports a startup snapshot, not that every mod loaded successfully. No hot reload or testing map is implemented. Close the game normally to save; closing RimPulse leaves the game running." Classes="caption" TextWrapping="Wrap" />
+              </StackPanel>
+            </ScrollViewer>
           </Border>
         </TabItem>
         <TabItem Header="Mod project">

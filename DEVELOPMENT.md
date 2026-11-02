@@ -12,7 +12,7 @@ systems) is the primary target; the same commands work on Windows and macOS unle
 | **.NET SDK 10.0.100+** | Builds the desktop app, Core library and tests (`net10.0`) | `dotnet --info` |
 | Git | Source control | `git --version` |
 | A desktop session (X11 or Wayland) | Opening the Avalonia window | — |
-| RimWorld 1.6 and/or 1.7 | Only needed to make detection find something | — |
+| RimWorld 1.6 and/or 1.7 | Required to compile/load a real companion and verify runtime behavior | — |
 
 ### Installing the .NET 10 SDK on Linux Mint / Ubuntu
 
@@ -89,6 +89,7 @@ root automatically.
 | --- | --- | --- | --- |
 | Configuration | `${XDG_CONFIG_HOME:-~/.config}/RimPulse/config.json` | `%APPDATA%\RimPulse\config.json` | `~/Library/Application Support/RimPulse/config.json` |
 | Log file | `${XDG_STATE_HOME:-~/.local/state}/RimPulse/logs/rimpulse.log` | `%LOCALAPPDATA%\RimPulse\logs\rimpulse.log` | `~/Library/Logs/RimPulse/rimpulse.log` |
+| Generated companion / retained profiles | `<state>/companion/`, `<state>/runtime-sessions/` | Setup and launch are currently Linux-only | Setup and launch are currently Linux-only |
 
 The log rotates at 2 MB and keeps up to three archives. A corrupt configuration file is renamed to
 `config.json.corrupt-<timestamp>` (never deleted) and RimPulse starts from defaults.
@@ -97,7 +98,7 @@ Useful reset commands while developing:
 
 ```bash
 rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/RimPulse"          # forget selected installation & paths
-rm -rf "${XDG_STATE_HOME:-$HOME/.local/state}/RimPulse"      # delete logs
+rm -rf "${XDG_STATE_HOME:-$HOME/.local/state}/RimPulse/logs" # delete logs only; preserve profiles
 ```
 
 ## 5. Publishing
@@ -132,6 +133,10 @@ Keep published output out of Git (`artifacts/` is ignored).
 | Build fails with hundreds of `CS0246` / `CS0103` errors | A dependency is not in the reference set — usually a `PackageReference` that has not been restored, or an assembly the project only declares behind a condition | Read the `Build` entry in the log: it lists the projects, the reference set, the first diagnostics and an error-code histogram, and names any package it could not resolve |
 | Build fails with hundreds of `CS0436`, `CS0104` and `CS0121` errors, all in one project | That project compiles its own stand-ins for the game's API (`Verse.*`, `RimWorld.*`, `UnityEngine.*`) while the installation's real assemblies are in the reference set too, so every type it duplicates is ambiguous | RimPulse names such a project in one line and leaves test projects out of the build (`IsTestProject`, a test-framework `PackageReference`, or a `*.Tests` project name). For any other project, exclude the stand-in sources from the compilation or stop referencing the game in it |
 | Build error count is in the log but not the errors | Older logs only recorded the summary line | Every build now writes its detail block below the summary; check that the app you run is current |
+| Companion install fails | Game assembly missing/incompatible, unwritable `Mods/`, or an unrelated existing destination | Check the compile diagnostics and permissions. Inspect the existing path; RimPulse will not overwrite it. |
+| Game running, companion waiting | Companion disabled, game not yet at snapshot phase, failed game-side compile/load, incompatible version/PID, or isolated mod config ignored | Check that the mod is enabled in the profile actually in use, inspect the game log and app log, and verify real-game compatibility. A process alone is not readiness. |
+| Selected project absent or mismatched | The package ID is missing/inactive or another directory for the same ID was loaded | Inspect the startup list and the actual game-reported root path. Explicitly link the selected project if needed, avoid duplicate copies and restart. |
+| Isolated game misses DLC or dependencies | New profiles initially select only Core, companion and the chosen package ID | Enable needed DLC/dependencies in the profile; fresh launches create new profiles and restarts in a new process are not monitored by the original session. |
 | Unexpected behaviour | — | Read the activity log first, then the log file; both record detection, configuration and UI errors |
 
 Logs are the first place to look. Every startup writes the platform, configuration path and log path:
@@ -148,27 +153,46 @@ diagnostics list is capped at 500 rows for the same reason; the log is the compl
 
 ## 7. Verification status
 
-Honest accounting of how the current code has been verified. Update this section whenever a claim changes.
-
-| Area | Status | How it was verified |
+| Area | Status | Evidence / next action |
 | --- | --- | --- |
-| C# syntax of all sources | New changes not yet verified | Run `dotnet build` in CI or with the .NET 10 SDK |
-| XAML / MSBuild / solution files | New changes not yet verified | Compile the app with compiled bindings enabled |
-| `dotnet build` of the solution | New changes not yet verified | GitHub Actions, Release configuration |
-| `dotnet test` of the suite | New changes not yet verified | GitHub Actions, Release configuration; includes direct process-launch tests using synthetic executables |
-| Credits catalog completeness | Verified | Encoded as tests (`CreditsCatalogTests`) and re-checked on every push |
-| Opening the desktop window | Verified for the previous milestone | Run on Linux with a real desktop session; the new project list and build panel need the same treatment |
-| Building a mod against a real installation | **Partially verified** | One real 1.6.4871 (`rev598`) run compiled the mod's own assembly against the installation (3 `CS0618` deprecation warnings), while its `*.Tests` project produced 712 errors: hand-written game stand-ins compiled next to the real assemblies. Test projects are now left out of a build and the duplicate-type cause is reported, both covered by tests in this change; that real-installation run has not been repeated yet |
-| Installation detection against a real RimWorld 1.6 install | **Not verified** | Requires a machine with the game installed |
-| Installation detection against a real RimWorld 1.7 install | **Not verified** | Requires a machine with the game installed |
-| Direct Linux game launch and exit monitoring | Implemented, not yet verified against a real installation | Test both versions on a real Linux desktop; confirm executable names and Steam behavior |
-| Companion, IPC, managed mod configuration and reload | Not implemented | Milestones 4–6 |
+| Full solution and official test suite | **Not run for this increment** | This environment has no .NET 10 SDK or NuGet access. Run `dotnet build RimPulse.slnx -c Release` and `dotnet test RimPulse.slnx -c Release` on an SDK-equipped machine. The prior commit's CI is not evidence for this change. |
+| Core and companions | **Synthetic checks only** | A temporary .NET 10/Roslyn reflection runner with xUnit-compatible shims compiled Core and passed 283 cases, including launcher, IPC, profile and link tests. It built both adapters against fake APIs and exchanged a real loopback snapshot with a fake 1.7 game. The 1.6 fake uses .NET 10 stand-ins, not Mono reference assemblies. This is not an official xUnit run. |
+| Avalonia UI | **Not built** | The view model compiled with temporary UI stubs and the XAML is XML-well-formed; real compiled bindings, startup and layout need the SDK and Avalonia packages. |
+| Real 1.6 / 1.7 companions and separate profile | **Not verified** | Complete the checklist below for each installed version; document actual game versions and any errors. |
+| Process exit / app close | **Synthetic process tests only for this increment** | Confirm on both real Linux games; closing RimPulse intentionally leaves the process alive. |
+| Windows / macOS runtime | **Not implemented** | Direct game launch, companion install and project linking are currently Linux-only. |
+| Live reload, testing map, runtime commands | **Not implemented** | Milestones 5–6. |
 
-The first CI run found a real defect (the rotating log sink left no active log file after a rotation) and a
-wrong test expectation (`shortVersion` was asserted as `1.6.4851` instead of `1.6`). Both are fixed.
+### Real-game verification checklist (Linux)
 
-If a build fails on your machine but passes in CI, report your SDK version (`dotnet --info`) and the
-compiler output.
+This is an experiment, not a claim that isolation already works. Do this with a disposable development mod
+and **back up normal saves and config first**. The save-data flag is not an OS sandbox, and logs, engine
+preferences and arbitrary mods can still access shared files. Do not share per-launch environment tokens.
+
+1. Run the full build and official tests above. Select a known 1.6 installation and a small development mod
+   with a unique package ID. Record the game's exact version, normal configuration path and a copy/hash of its
+   `ModsConfig.xml` before any launch.
+2. In Runtime, install the companion link and, if the project is not already discoverable, link the project.
+   Verify each link target. Existing paths must never be silently replaced. Confirm the generated 1.6 DLL
+   builds with the game's *actual* Mono references; inspect the activity log for errors.
+3. Launch isolated development. Record the displayed profile path and inspect its `Config/ModsConfig.xml`.
+   In the game, confirm which config and save location is really in use and whether Core, the companion and
+   the intended project are enabled. Check that the original normal config and saves have not changed.
+   Check the game's actual log path rather than assuming logs are isolated.
+4. Verify the UI separately shows a running PID, a connected companion, the exact game-reported version and
+   a startup list containing the selected project's **package ID and directory**. Check the game log for mod
+   loading errors. A connection and list prove neither main-menu readiness nor successful initialization.
+   Note if a new game process after an in-game restart loses the old session (expected).
+5. Close the game normally and confirm exit status; in a separate run close RimPulse first and confirm the
+   game remains running. Check that a launch without the companion enabled shows waiting, not connected.
+6. Repeat with a real 1.7 Linux Waylith installation and its real references; verify that the save-data flag,
+   generated mod layout and runtime APIs work there. Note any shared Player.log or preferences. Do not assume
+   Windows observations prove Linux behavior.
+7. After both processes are closed, remove only verified RimPulse symlinks from the game's `Mods/` folder and
+   inspect retained `<state>/companion/` and `<state>/runtime-sessions/` before deleting them. Never delete
+   the symlink targets or normal configuration accidentally. Record failures and version-specific logs.
+
+If a build fails on your machine but passes in CI, report `dotnet --info` and compiler output.
 
 ## 8. Credits and attribution
 
@@ -214,6 +238,7 @@ comment.
    MSBuild targets, item/string functions, wildcard imports and metadata-dependent item expressions are not.
 3. **Dependency resolution** — declared dependencies are displayed, not resolved against installed mods; the
    load-folder projection currently treats only the mod itself as active.
-4. **Runtime integration (milestone 4)** — direct Linux process launch and exit monitoring are implemented.
-   Verify them with real installations; then implement version-specific companions, IPC, loaded-mod reporting
-   and managed development configuration. Process liveness is not game readiness.
+4. **Runtime integration (milestone 4)** — Linux launch, opt-in version-specific companions, authenticated
+   status and fresh separate profiles are implemented experimentally. Verify against real 1.6 and 1.7 games;
+   then consider persistent profiles, dependency handling, and stronger readiness evidence. Neither process
+   liveness nor a startup snapshot is main-menu readiness.

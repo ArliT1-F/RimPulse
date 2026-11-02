@@ -133,6 +133,30 @@ compiler invocation.
   `ModOutputDirectoryResolver` in Core. Whether that folder is the only lookup path in 1.7 is part of open
   question 3 below.
 
+### Experimental companion and separate profile (milestone 4)
+
+| | 1.6 | 1.7 |
+| --- | --- | --- |
+| Companion input | Separate adapter compiled against the selected installation's Unity/Mono managed assemblies | Separate adapter compiled against the selected Waylith assemblies plus the desktop's .NET runtime references |
+| API used | `LongEventHandler.ExecuteWhenFinished`, `VersionControl.CurrentVersionStringWithRev`, `LoadedModManager.RunningModsListForReading` and each mod's name, package ID and root directory | Same surface is assumed to exist; compatibility and startup timing are **not verified** against a real 1.7 game |
+| Save/config profile | `-savedatafolder=<absolute path>` researched in 1.6 game startup; paths containing `=` are rejected by RimPulse because of the 1.6 argument parser | The same option is used experimentally; real Linux behavior and mod/config loading need verification |
+| Installation `Mods/` | Discovered from the game installation, not the separate save-data directory | Treated as shared; verify on the real game |
+| Companion verification | Synthetic adapter compilation uses .NET 10 stand-ins, **not Mono**; no real game run | Synthetic fake-game build and local IPC exchange only; no real game run |
+
+The 1.6 startup, mod discovery and argument behavior above were researched read-only in
+[32bitx64bit's 1.6 decompilation](https://github.com/32bitx64bit/RW-Decompiled-1.6); game code belongs to
+Ludeon Studios and none was copied. [RimLoc's isolated-run notes](https://github.com/0-danielviktorovich-0/RimLoc)
+also discuss shared Mods and platform preference limitations. In the 1.6 code path, the companion queues a
+snapshot after startup static constructors, but this is **not evidence that the main menu appeared or all mods
+initialized successfully**. RimPulse's 1.7 timing and API assumptions require a real installation.
+
+RimPulse writes a fresh version-stamped `ModsConfig.xml` containing Core, its companion and the selected
+project. It does not resolve dependencies or select DLC; the game may enable newly discovered expansions itself.
+Subsequent isolated launches make new profiles. Separate save data does not sandbox the game or mods. Engine preferences and logs may remain shared. In
+[xtzhyhydwl/RimWorld_auto_test](https://github.com/xtzhyhydwl/RimWorld_auto_test)'s independent **Windows**
+1.7 experiment, `-logFile` was reportedly ignored and the default `Player.log` remained shared; that observation
+is not proof of Linux behavior. Verify both versions and actual log locations locally before relying on them.
+
 ### Assembly reload (milestone 6) — the hard problem
 
 > Prior art to study before writing any reload code (both featured in the app's Credits panel):
@@ -168,14 +192,16 @@ compiler invocation.
 
 [pardeike/RimBridgeServer](https://github.com/pardeike/RimBridgeServer) already runs an MCP server inside
 RimWorld to control and observe a running game, and the [RimWorldDevMCP ecosystem](https://github.com/search?q=RimWorldDevMCP&type=repositories)
-drives native developer actions from outside the process. Both are relevant to how RimPulse's companion mod
-should expose dev tools over IPC, and both are featured in the app's Credits panel.
+drives native developer actions from outside the process. Both are relevant to possible future developer
+actions and are featured in the app's Credits panel. RimPulse currently implements only an authenticated,
+read-only startup status and heartbeat, documented in [IPC.md](IPC.md); it does not expose game commands.
 
 ### Testing environment (milestone 5)
 
 The world/map generation APIs are the same managed API in both versions (1.7 claims mod compatibility),
 but the harness that drives them differs: 1.6 needs a companion mod running on Mono/.NET 4.7.2, 1.7 needs
-one compiled for `net10.0`. Two companion projects, one shared protocol.
+one compiled against the 1.7 reference set. RimPulse keeps two companion source adapters and one shared
+protocol; the exact real-game compatibility of each still needs testing.
 
 ## 4. Open questions to answer against a real installation
 
@@ -185,9 +211,9 @@ Keep this list current; each item blocks or shapes a later milestone.
 2. Asset folder layout in 1.7 (textures/audio paths used by the engine).
 3. How 1.7 loads mod assemblies (loader code, `AssemblyLoadContext` usage, dependency resolution order).
 4. Whether 1.6 mod assemblies can be swapped safely at all, or whether restart is the only option.
-5. Command-line arguments accepted by each build for automated launches (developer mode, skip intro,
-   direct save loading) — must be verified per version.
-6. Where each version keeps `ModsConfig.xml` and whether it can be prepared before launch.
+5. Command-line arguments accepted by each build for automated launches (including `-savedatafolder`,
+   developer mode, skip intro and direct save loading) — must be verified in actual games per version.
+6. Whether both games honor the prepared separate `ModsConfig.xml` and which logs/preferences remain shared.
 7. Whether both versions can coexist in one installation directory (Steam beta switching).
 8. Whether the host runtime's .NET 10 assemblies are an adequate reference set for compiling a 1.7 mod, or
    whether the game provides its own reference/targeting assemblies (see §3, build and reference resolution).
@@ -206,6 +232,8 @@ The layout and version facts are implemented and tested:
 - `RimPulse.Core.Build.GameReferenceResolver` — the per-layout reference set described in §3.
 - `RimPulse.Core.Projects.LoadFoldersReader` — version sections and conditions, as documented by the wiki;
   used to show which content folders a version would load.
+- `RimPulse.Companion/` — shared status client and separately compiled 1.6/1.7 source adapters.
+- `RimPulse.Core.Runtime` and `IPC` — explicit links, experimental fresh profiles, Linux child launch and
+  authenticated startup snapshots. None is verified against an actual game for this increment.
 
-No runtime, IPC or reload code exists yet, and nothing in this document should be read as a claim that it
-does.
+No hot reload, testing-map or game-command implementation exists yet.

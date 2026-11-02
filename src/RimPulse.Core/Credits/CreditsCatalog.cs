@@ -12,7 +12,7 @@ public static class CreditsCatalog
 {
     public const string AttributionPolicy =
         "Every project RimPulse references or depends on is listed here together with its creator and license. " +
-        "RimPulse adapts no RimWorld tooling code in milestone 1: those projects are listed because their work " +
+        "RimPulse adapts no RimWorld tooling code in this implementation: those projects are listed because their work " +
         "overlaps with RimPulse's milestones and was studied for reference. If code, data or assets from any of " +
         "them are ever adapted, the entry must be marked as adapted, the original author credited here, and the " +
         "original license honoured. Copyleft (GPL) and unlicensed projects must not be copied into RimPulse " +
@@ -42,7 +42,7 @@ public static class CreditsCatalog
             Creator: "Andreas Pardeike",
             Url: "https://github.com/pardeike/RimBridgeServer",
             Summary: "Runs an MCP server inside RimWorld so AI agents and external tools can remotely control and observe a running game.",
-            Relevance: "Reference for milestone 4 (IPC between RimPulse and the companion mod) and milestone 5 (exposing developer tools to an external process).",
+            Relevance: "Reference for authenticated local IPC and separating mod construction from runtime readiness; no RimBridgeServer code is copied.",
             License: "MIT"),
 
         new CreditEntry(
@@ -70,7 +70,7 @@ public static class CreditsCatalog
             Creator: "RimWorks",
             Url: "https://github.com/RimWorks/Rimworld-Pickle",
             Summary: "RimWorld mod testing framework: run Gherkin scenarios against a live game session, click the real UI, wait on real ticks and assert on the real colony.",
-            Relevance: "Reference for milestones 5 and 6: proving an action or reload really happened at the engine level.",
+            Relevance: "Reference for the game-owned running-mod list and startup lifecycle, and for verifying future testing or reload actions.",
             License: "MIT"),
 
         new CreditEntry(
@@ -128,6 +128,38 @@ public static class CreditsCatalog
             Summary: "XSD schema generator for RimWorld XML mod development, with validation and editor autocompletion support.",
             Relevance: "Reference for milestone 3 XML validation: structural diagnostics instead of merely checking that XML is well-formed. No license declared: reference only, do not copy code.",
             License: "No license declared"),
+
+        new CreditEntry(
+            ProjectName: "RimWorld 1.6 decompilation",
+            Creator: "32bitx64bit (decompilation); game code by Ludeon Studios",
+            Url: "https://github.com/32bitx64bit/RW-Decompiled-1.6",
+            Summary: "A decompiled view of RimWorld 1.6 intended to help mod authors inspect game APIs.",
+            Relevance: "Read-only research into game startup, mod discovery and savedatafolder parsing. Game code is proprietary and was not copied.",
+            License: "No license declared; proprietary game code, reference only"),
+
+        new CreditEntry(
+            ProjectName: "RimWorld auto test",
+            Creator: "xtzhyhydwl",
+            Url: "https://github.com/xtzhyhydwl/RimWorld_auto_test",
+            Summary: "Automation tooling with a documented RimWorld 1.7 Windows profile launch and bridge investigation.",
+            Relevance: "Reference for the savedatafolder option and version-specific launch observations; Linux behavior remains to be verified.",
+            License: "No license declared; reference only"),
+
+        new CreditEntry(
+            ProjectName: "RimLoc",
+            Creator: "0-danielviktorovich-0",
+            Url: "https://github.com/0-danielviktorovich-0/RimLoc",
+            Summary: "RimWorld localization tooling with research into separate save-data profiles on macOS.",
+            Relevance: "Reference only for the limits of savedatafolder and mod discovery; no GPL code or data is copied.",
+            License: "GPL-3.0; reference only"),
+
+        new CreditEntry(
+            ProjectName: "AI in RimWorld",
+            Creator: "ryseymour",
+            Url: "https://github.com/ryseymour/ai-in-rimworld",
+            Summary: "RimWorld automation research including notes about Linux game startup and profile paths.",
+            Relevance: "Read-only reference for Linux savedatafolder and ModsConfig conventions; no project code is copied.",
+            License: "No license declared; reference only"),
 
         // Actual dependencies of this repository, so the list covers what RimPulse runs on as well as what it studies.
         new CreditEntry(

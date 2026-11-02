@@ -25,6 +25,10 @@ public sealed class CreditsCatalogTests
         "https://github.com/RimWorks/semantic-release-steam",
         "https://github.com/search?q=RimWorldDevMCP&type=repositories",
         "https://github.com/search?q=RimTest+Redux&type=repositories",
+        "https://github.com/32bitx64bit/RW-Decompiled-1.6",
+        "https://github.com/xtzhyhydwl/RimWorld_auto_test",
+        "https://github.com/0-danielviktorovich-0/RimLoc",
+        "https://github.com/ryseymour/ai-in-rimworld",
     ];
 
     [Fact]

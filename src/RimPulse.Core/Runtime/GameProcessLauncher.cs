@@ -4,7 +4,10 @@ using RimPulse.Core.Platform;
 
 namespace RimPulse.Core.Runtime;
 
-/// <summary>Starts the selected installation directly, without changing its mod or save configuration.</summary>
+/// <summary>Optional per-process settings; neither environment variables nor arguments change global settings.</summary>
+public sealed record GameLaunchOptions(string? SaveDataDirectory = null, IReadOnlyDictionary<string, string>? Environment = null);
+
+/// <summary>Starts the selected installation directly, without editing its normal mod or save configuration.</summary>
 public static class GameProcessLauncher
 {
     /// <summary>Resolve only executable names documented for the Linux versions of the game.</summary>
@@ -30,12 +33,11 @@ public static class GameProcessLauncher
     }
 
     /// <summary>Rechecks the installation on disk and returns a handle to the directly launched process.</summary>
-    public static Process Start(RimWorldInstallation installation)
+    public static Process Start(RimWorldInstallation installation, GameLaunchOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(installation);
         var current = InstallationProbe.Probe(installation.RootPath, installation.Source);
-        if (current.Version.Major != installation.Version.Major || current.Version.Minor != installation.Version.Minor ||
-            current.Layout != installation.Layout)
+        if (current.Version != installation.Version || current.Layout != installation.Layout)
             throw new InvalidOperationException("The installation changed since it was selected. Re-scan before launching.");
 
         var executable = ResolveExecutable(current, HostPlatformExtensions.Detect());
@@ -50,6 +52,14 @@ public static class GameProcessLauncher
         };
         try
         {
+            if (options?.SaveDataDirectory is { } directory)
+            {
+                if (!Path.IsPathFullyQualified(directory) || directory.Contains('='))
+                    throw new ArgumentException("The separate save-data directory must be an absolute path without '='.", nameof(options));
+                process.StartInfo.ArgumentList.Add("-savedatafolder=" + directory);
+            }
+            if (options?.Environment is { } environment)
+                foreach (var (name, value) in environment) process.StartInfo.Environment[name] = value;
             if (!process.Start()) throw new InvalidOperationException("The game process could not be started.");
             return process;
         }
