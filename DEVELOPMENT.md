@@ -155,9 +155,9 @@ diagnostics list is capped at 500 rows for the same reason; the log is the compl
 
 | Area | Status | Evidence / next action |
 | --- | --- | --- |
-| Full solution and official test suite | **Not run for this increment** | This environment has no .NET 10 SDK or NuGet access. Run `dotnet build RimPulse.slnx -c Release` and `dotnet test RimPulse.slnx -c Release` on an SDK-equipped machine. The prior commit's CI is not evidence for this change. |
+| Full solution and official test suite | **Passed in GitHub Actions** | The Ubuntu/.NET 10 build and tests passed for code commit `9a9cc1d`. The local development environment has no .NET 10 SDK or NuGet access. |
 | Core and companions | **Synthetic checks only** | A temporary .NET 10/Roslyn reflection runner with xUnit-compatible shims compiled Core and passed 283 cases, including launcher, IPC, profile and link tests. It built both adapters against fake APIs and exchanged a real loopback snapshot with a fake 1.7 game. The 1.6 fake uses .NET 10 stand-ins, not Mono reference assemblies. This is not an official xUnit run. |
-| Avalonia UI | **Not built** | The view model compiled with temporary UI stubs and the XAML is XML-well-formed; real compiled bindings, startup and layout need the SDK and Avalonia packages. |
+| Avalonia UI | **Compiled in CI; desktop unverified** | The full GitHub Actions build included Avalonia/XAML and compiled bindings. Startup and layout still need a real desktop session. |
 | Real 1.6 / 1.7 companions and separate profile | **Not verified** | Complete the checklist below for each installed version; document actual game versions and any errors. |
 | Process exit / app close | **Synthetic process tests only for this increment** | Confirm on both real Linux games; closing RimPulse intentionally leaves the process alive. |
 | Windows / macOS runtime | **Not implemented** | Direct game launch, companion install and project linking are currently Linux-only. |

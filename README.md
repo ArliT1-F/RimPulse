@@ -107,7 +107,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
-- A previous commit passed CI. The current changes still need a full SDK build, official test run and real-game checks.
+- The solution build and official tests passed in GitHub Actions for code commit `9a9cc1d`; real-game checks remain.
 
 ### Deliberately not there yet
 
@@ -361,9 +361,9 @@ RimPulse without an explicit licensing decision.
 
 | Check | Result |
 | --- | --- |
-| Full `dotnet build` / official `dotnet test` for these changes | **Not yet run** — the development environment lacks the .NET 10 SDK and NuGet access. An earlier commit passed GitHub Actions; that does not verify these changes. |
+| Full `dotnet build` / official `dotnet test` for these changes | **Passed in GitHub Actions** on Ubuntu with .NET 10 for code commit `9a9cc1d`. The local development environment lacks the SDK and NuGet access. |
 | Core and companion synthetic checks | **Partial** — Core compiled and 283 cases passed with a temporary .NET 10/Roslyn reflection harness and xUnit-compatible shims. Synthetic 1.6/1.7 references exercise both companion build paths; an in-process fake 1.7 game completes the authenticated snapshot exchange. These are not real game assemblies or an official SDK test run. |
-| Avalonia desktop | **Not built for this change** — the view model was compiled against temporary UI stubs; real Avalonia/XAML compilation and a desktop session remain required. |
+| Avalonia desktop | **Build passed in CI**, including XAML and compiled bindings; the updated UI has not been exercised in a real desktop session. |
 | Real installations | **Not verified for this increment** — build and load both companions, verify isolated profile behavior and check status on real Linux 1.6 and 1.7 installations. A process, connection or startup snapshot alone does not demonstrate main-menu readiness or successful mod initialization. |
 | Windows / macOS runtime launch | **Not implemented** — direct launch and companion setup are currently Linux-only. |
 
