@@ -1,12 +1,18 @@
 using System.Xml;
 using System.Xml.Linq;
+using RimPulse.Core.Game;
 using RimPulse.Core.Installations;
 
 namespace RimPulse.Core.Projects;
 
 /// <summary>Metadata read from a mod's About.xml. Missing fields are reported separately as problems.</summary>
 public sealed record ModMetadata(string? Name, string? PackageId, string? Author,
-    IReadOnlyList<string> SupportedVersions, IReadOnlyList<ModDependency> Dependencies);
+    IReadOnlyList<string> SupportedVersions, IReadOnlyList<ModDependency> Dependencies,
+    ModLoadRules? LoadRules = null);
+
+/// <summary>Ordering and incompatibility declarations, projected onto an exact game version when supplied.</summary>
+public sealed record ModLoadRules(IReadOnlyList<string> LoadAfter, IReadOnlyList<string> LoadBefore,
+    IReadOnlyList<string> ForceLoadAfter, IReadOnlyList<string> ForceLoadBefore, IReadOnlyList<string> IncompatibleWith);
 
 /// <summary>A declared dependency; Version is null for unversioned declarations.</summary>
 public sealed record ModDependency(string? PackageId, string? DisplayName, string? Version);
@@ -25,7 +31,7 @@ public static class ModProjectInspector
     private static readonly string[] ContentFolders =
         ["About", "Assemblies", "Defs", "Patches", "Textures", "Sounds", "Languages", "Source"];
 
-    public static ModProjectInspection Inspect(string path)
+    public static ModProjectInspection Inspect(string path, GameVersion? targetVersion = null)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
@@ -124,17 +130,40 @@ public static class ModProjectInspector
                     dependencies.Add(new(id, display, version));
                 }
             }
-            AddDependencies(element.Element("modDependencies"), null);
-            if (element.Element("modDependenciesByVersion") is { } byVersion)
+            // The game replaces the common list with an exact major.minor match, not a union.
+            var dependencyNodes = VersionedList(element, "modDependencies", targetVersion);
+            foreach (var container in dependencyNodes.Select(node => node.Parent).Where(node => node is not null).Distinct())
+                AddDependencies(container, null);
+            if (targetVersion is null && element.Element("modDependenciesByVersion") is { } byVersion)
             {
                 foreach (var version in byVersion.Elements()) AddDependencies(version, version.Name.LocalName);
             }
-            return new(root, new(name, packageId, author, versions, dependencies), folders, hasLoadFolders, loadFolders, problems);
+            var rules = new ModLoadRules(Ids(element, "loadAfter", targetVersion), Ids(element, "loadBefore", targetVersion),
+                Ids(element, "forceLoadAfter", targetVersion), Ids(element, "forceLoadBefore", targetVersion),
+                Ids(element, "incompatibleWith", targetVersion));
+            return new(root, new(name, packageId, author, versions, dependencies, rules), folders, hasLoadFolders, loadFolders, problems);
         }
         catch (Exception ex) when (ex is XmlException or IOException or UnauthorizedAccessException)
         {
             problems.Add($"Could not read About.xml: {ex.Message}");
             return new(root, null, folders, hasLoadFolders, loadFolders, problems);
         }
+    }
+
+    private static IReadOnlyList<string> Ids(XElement element, string name, GameVersion? version)
+        => VersionedList(element, name, version).Select(node => node.Value.Trim())
+            .Where(value => value.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    private static List<XElement> VersionedList(XElement element, string name, GameVersion? version)
+    {
+        if (version is { IsKnown: true } game && element.Element(name + "ByVersion") is { } versions)
+        {
+            var key = "v" + game.ShortVersion;
+            var match = versions.Elements().FirstOrDefault(node =>
+                string.Equals(node.Name.LocalName, key, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(node.Name.LocalName, game.ShortVersion, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) return match.Elements("li").ToList();
+        }
+        return element.Element(name)?.Elements("li").ToList() ?? [];
     }
 }

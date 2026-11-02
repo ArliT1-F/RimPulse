@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:RimPulse.App.ViewModels"
+        xmlns:views="using:RimPulse.App.Views"
         xmlns:diagnostics="using:RimPulse.Core.Diagnostics"
         x:Class="RimPulse.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -137,7 +138,7 @@
                          TextWrapping="Wrap"
                          Margin="2,6,2,0"
                          VerticalAlignment="Top"
-                         Text="Nothing detected yet. RimPulse searches Steam libraries, GOG folders and the RIMWORLD_DIR environment variable. Add a path above to point at a specific installation." />
+                         Text="Nothing detected yet. Use Re-scan to search Steam and GOG, or add an installation path above. No environment variable is required." />
             </Grid>
 
             <SelectableTextBlock Grid.Row="3"
@@ -216,22 +217,23 @@
         </Border>
       </Grid>
         </TabItem>
+        <TabItem Header="Profiles">
+          <views:ProfilesTab />
+        </TabItem>
         <TabItem Header="Runtime">
           <Border Classes="panel" Margin="0,12,0,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
               <StackPanel Spacing="12">
                 <SelectableTextBlock Text="GAME PROCESS &amp; COMPANION" Classes="section" />
-                <SelectableTextBlock Text="Setup is opt-in. Install creates a symbolic link in the selected game's Mods folder; linking a project does the same without changing the project itself. Reinstall the companion after a game update before an isolated launch." Classes="caption" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="Setup is opt-in. Install creates a companion link in the selected game's Mods folder. Link the development project in Profiles. Reinstall the companion after a game update." Classes="caption" TextWrapping="Wrap" />
                 <WrapPanel Orientation="Horizontal">
-                  <Button Content="Install companion link" Classes="quiet" Margin="0,0,8,8" Command="{Binding InstallCompanionCommand}" />
+                  <Button Content="Install / rebuild companion" Classes="quiet" Margin="0,0,8,8" Command="{Binding InstallCompanionCommand}" />
                   <Button Content="Link selected project" Classes="quiet" Margin="0,0,8,8" Command="{Binding LinkDevelopmentProjectCommand}" />
+                  <Button Content="Launch normally" Classes="quiet" Margin="0,0,8,8" Command="{Binding LaunchGameCommand}" />
+                  <Button Content="Save &amp; launch development" Classes="accent" Margin="0,0,8,8" Command="{Binding LaunchDevelopmentCommand}" />
                 </WrapPanel>
+                <SelectableTextBlock Text="Development launch reuses the profile's save directory and applies its saved mod list and game settings. Normal launch leaves your ordinary configuration untouched. Profile edits are locked while a launched game is running; close it normally before relaunching." Classes="caption" TextWrapping="Wrap" />
                 <SelectableTextBlock Text="{Binding RuntimeSetupStatus}" Classes="caption" TextWrapping="Wrap" />
-                <WrapPanel Orientation="Horizontal">
-                  <Button Content="Launch RimWorld normally" Classes="quiet" Margin="0,0,8,8" Command="{Binding LaunchGameCommand}" />
-                  <Button Content="Launch isolated development" Classes="accent" Margin="0,0,8,8" Command="{Binding LaunchDevelopmentCommand}" />
-                </WrapPanel>
-                <SelectableTextBlock Text="Experimental: isolated launch creates a NEW retained save/config profile with Core, the companion and the selected project. Link the project first if needed. RimPulse does not resolve dependencies or enable DLC; the game may enable newly discovered expansions. This is not a sandbox: logs, preferences and mods may still use shared files. Real-game behavior needs verification." Classes="caption" TextWrapping="Wrap" />
                 <SelectableTextBlock Text="{Binding RuntimeStatus}" Classes="body" TextWrapping="Wrap" />
                 <SelectableTextBlock Text="{Binding CompanionStatus}" Classes="body" TextWrapping="Wrap" />
                 <SelectableTextBlock Text="{Binding RuntimeProjectStatus}" Classes="body" TextWrapping="Wrap" />
@@ -239,7 +241,7 @@
                 <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                   <SelectableTextBlock Text="{Binding RuntimeModsText}" Classes="caption mono" />
                 </ScrollViewer>
-                <SelectableTextBlock Text="A connected companion reports a startup snapshot, not that every mod loaded successfully. No hot reload or testing map is implemented. Close the game normally to save; closing RimPulse leaves the game running." Classes="caption" TextWrapping="Wrap" />
+                <SelectableTextBlock Text="A connection reports startup data, not map readiness or successful initialization of every mod. Native quick test, when selected in Profiles, generates a real 1.6 game map. No hot reload, custom sandbox or tick controls yet. Closing RimPulse leaves the game running." Classes="caption" TextWrapping="Wrap" />
               </StackPanel>
             </ScrollViewer>
           </Border>
@@ -400,6 +402,9 @@
               </Grid>
             </Grid>
           </Border>
+        </TabItem>
+        <TabItem Header="Settings">
+          <views:SettingsTab />
         </TabItem>
       </TabControl>
 

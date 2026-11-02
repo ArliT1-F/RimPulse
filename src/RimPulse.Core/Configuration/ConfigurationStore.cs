@@ -139,18 +139,23 @@ public sealed class ConfigurationStore
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        configuration.Normalize();
-
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Serialize a stable snapshot under the same lock as the write. UI selection changes must not
+            // mutate a list while an earlier save is serializing it.
+            var snapshot = System.Text.Json.JsonSerializer.SerializeToNode(configuration, SerializerOptions)!
+                .Deserialize<RimPulseConfiguration>(SerializerOptions)!;
+            snapshot.SchemaVersion = RimPulseConfiguration.CurrentSchemaVersion;
+            snapshot.Normalize();
+
             var directory = Path.GetDirectoryName(_filePath);
             if (!string.IsNullOrEmpty(directory))
             {
                 Directory.CreateDirectory(directory);
             }
 
-            var json = JsonSerializer.Serialize(configuration, SerializerOptions);
+            var json = JsonSerializer.Serialize(snapshot, SerializerOptions);
             var temporaryPath = $"{_filePath}.tmp";
 
             await File.WriteAllTextAsync(temporaryPath, json, cancellationToken).ConfigureAwait(false);

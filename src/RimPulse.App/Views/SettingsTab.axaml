@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:RimPulse.App.ViewModels"
+             x:Class="RimPulse.App.Views.SettingsTab"
+             x:DataType="vm:MainWindowViewModel">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="14" Margin="0,12,0,0" MaxWidth="1000" HorizontalAlignment="Left">
+      <Border Classes="panel">
+        <StackPanel Spacing="12">
+          <SelectableTextBlock Text="APPLICATION SETTINGS" Classes="section" />
+          <SelectableTextBlock Text="Settings are saved by RimPulse. The paths below are for inspection and troubleshooting, not files you need to edit." Classes="caption" TextWrapping="Wrap" />
+          <CheckBox Content="Scan Steam and GOG locations on startup" IsChecked="{Binding Settings.AutoDetectOnStartup, Mode=TwoWay}" />
+          <SelectableTextBlock Text="Turn off to use only remembered installations and paths added in the Installations tab. Re-scan always searches explicitly." Classes="caption" TextWrapping="Wrap" Margin="28,0,0,0" />
+          <CheckBox Content="Show the activity panel" IsChecked="{Binding Settings.ShowActivityLog, Mode=TwoWay}" />
+          <Grid ColumnDefinitions="180,200" Margin="0,4,0,0">
+            <SelectableTextBlock Text="Minimum diagnostic level" Classes="body" VerticalAlignment="Center" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Settings.LogLevels}" SelectedItem="{Binding Settings.MinimumLogLevel, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+          </Grid>
+          <SelectableTextBlock Text="Errors and warnings are always available at Warning or Error level. Debug is useful when diagnosing builds and companion startup." Classes="caption" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <Border Classes="panel">
+        <StackPanel Spacing="12">
+          <SelectableTextBlock Text="BUILD SETTINGS" Classes="section" />
+          <CheckBox Content="Release optimization (off = Debug)" IsChecked="{Binding Settings.ReleaseBuild, Mode=TwoWay}" />
+          <CheckBox Content="Emit portable PDB debug symbols" IsChecked="{Binding Settings.EmitDebugSymbols, Mode=TwoWay}" />
+          <SelectableTextBlock Text="These choices apply to the next mod build. The project's own language, unsafe and nullable settings are preserved. This is RimPulse's Roslyn optimization setting, not a full MSBuild Configuration evaluation. The companion is always built separately against the selected game's references." Classes="caption" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <Border Classes="panel">
+        <StackPanel Spacing="10">
+          <SelectableTextBlock Text="STORAGE &amp; OVERRIDES" Classes="section" />
+          <SelectableTextBlock Text="Configuration file" Classes="caption" />
+          <SelectableTextBlock Text="{Binding ConfigurationFilePath}" Classes="body mono" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="Diagnostic log" Classes="caption" />
+          <SelectableTextBlock Text="{Binding LogFilePath}" Classes="body mono" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="{Binding EnvironmentOverrideDisplay}" IsVisible="{Binding HasEnvironmentOverride}" Classes="caption" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="RIMWORLD_DIR is optional legacy detection, not a required setting. Add installation and project paths in their tabs instead. Development profiles live under RimPulse's state directory; deleting a profile's settings does not delete its saves." Classes="caption" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <StackPanel Orientation="Horizontal" Spacing="14">
+        <Button Content="Save settings" Classes="accent" Command="{Binding SaveSettingsCommand}" />
+        <SelectableTextBlock Text="{Binding Settings.Status}" Classes="caption" TextWrapping="Wrap" MaxWidth="650" VerticalAlignment="Center" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -137,11 +137,9 @@ dotnet run --project src/RimPulse.App # start the desktop application
 dotnet test RimPulse.slnx             # run the test suite
 ```
 
-If your game is not in a Steam or GOG library, point RimPulse at it explicitly:
-
-```bash
-RIMWORLD_DIR="$HOME/games/RimWorld" dotnet run --project src/RimPulse.App
-```
+If your game is not in a Steam or GOG library, open **Installations**, enter its directory and choose
+**Add**. The path is remembered by the app. `RIMWORLD_DIR` remains an optional legacy discovery hint;
+no environment variable or manual JSON editing is needed for normal use.
 
 Full build, test, publish and troubleshooting instructions live in [`DEVELOPMENT.md`](DEVELOPMENT.md).
 

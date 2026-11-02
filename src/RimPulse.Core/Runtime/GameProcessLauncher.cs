@@ -5,7 +5,7 @@ using RimPulse.Core.Platform;
 namespace RimPulse.Core.Runtime;
 
 /// <summary>Optional per-process settings; neither environment variables nor arguments change global settings.</summary>
-public sealed record GameLaunchOptions(string? SaveDataDirectory = null, IReadOnlyDictionary<string, string>? Environment = null);
+public sealed record GameLaunchOptions(string? SaveDataDirectory = null, IReadOnlyDictionary<string, string>? Environment = null, bool NativeQuickStart = false);
 
 /// <summary>Starts the selected installation directly, without editing its normal mod or save configuration.</summary>
 public static class GameProcessLauncher
@@ -41,6 +41,8 @@ public static class GameProcessLauncher
             throw new InvalidOperationException("The installation changed since it was selected. Re-scan before launching.");
 
         var executable = ResolveExecutable(current, HostPlatformExtensions.Detect());
+        if (options?.NativeQuickStart == true && (current.Version.Minor != 6 || current.Layout != InstallationLayout.UnityMono))
+            throw new PlatformNotSupportedException("Native quick start is supported for RimWorld 1.6 only; its 1.7 equivalent has not been verified.");
         var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -58,6 +60,7 @@ public static class GameProcessLauncher
                     throw new ArgumentException("The separate save-data directory must be an absolute path without '='.", nameof(options));
                 process.StartInfo.ArgumentList.Add("-savedatafolder=" + directory);
             }
+            if (options?.NativeQuickStart == true) process.StartInfo.ArgumentList.Add("-quicktest");
             if (options?.Environment is { } environment)
                 foreach (var (name, value) in environment) process.StartInfo.Environment[name] = value;
             if (!process.Start()) throw new InvalidOperationException("The game process could not be started.");

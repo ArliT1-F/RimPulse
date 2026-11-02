@@ -20,7 +20,7 @@ namespace RimPulse.App.ViewModels;
 /// Installation discovery, mod inspection, selection and diagnostics. Everything shown in the UI
 /// is produced by real work — no placeholder panels for features that do not exist yet.
 /// </summary>
-public sealed class MainWindowViewModel : ObservableObject, IDisposable
+public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private const int MaxActivityEntries = 250;
 
@@ -103,6 +103,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _environmentRimWorldDirectory = environmentRimWorldDirectory;
         _linkLauncher = linkLauncher ?? new SystemLinkLauncher();
         _clipboard = clipboard ?? new SystemClipboardService();
+        InitializeProfiles();
 
         Installations = new ObservableCollection<InstallationViewModel>();
         SelectedDetails = new ObservableCollection<DetailRow>();
@@ -217,7 +218,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var result = await Task.Run(() => CompanionInstaller.BuildAndLink(installation, _paths));
             if (_disposed) return;
             RuntimeSetupStatus = $"Companion prepared at {result.ModDirectory} and linked at {result.GameLink}. " +
-                "Use Launch isolated development to enable it in a separate profile, or enable it manually in your normal game.";
+                "Use Save & launch development to enable it in a reusable profile, or enable it manually in your normal game.";
             _log.Info("Runtime", RuntimeSetupStatus, result.Warnings.Count == 0 ? null : string.Join(Environment.NewLine, result.Warnings));
         }
         catch (Exception ex)
@@ -278,26 +279,46 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Task? monitor = null;
         try
         {
-            if (isolated && !await Task.Run(() => CompanionInstaller.IsInstalled(installation, _paths)))
-                throw new InvalidOperationException("Install or rebuild the companion link for this game version before launching a development profile.");
+            DevelopmentProfileSettings? savedProfile = null;
+            ModCatalog? launchCatalog = null;
+            if (isolated)
+            {
+                // Preparation runs before the runtime lock so the explicit Save & launch can save the draft.
+                _runtimeRunning = false;
+                _runtimeSetupBusy = true;
+                try
+                {
+                    if (!await Task.Run(() => CompanionInstaller.IsInstalled(installation, _paths)))
+                        throw new InvalidOperationException("Install or rebuild the companion link for this game version before launching a development profile.");
+                    if (!await RefreshProfileCatalogAsync(partOfLaunch: true)) throw new InvalidOperationException(Profile.Status);
+                    if (!await SaveProfileAsync(partOfLaunch: true))
+                        throw new InvalidOperationException(Profile.Status);
+                    savedProfile = _configuration.DevelopmentProfiles.First(saved => saved.Id == Profile.Id).Clone();
+                    launchCatalog = _profileCatalog;
+                    projectPath = savedProfile.ProjectPath;
+                }
+                finally { _runtimeSetupBusy = false; _runtimeRunning = true; RefreshRuntimeCommands(); }
+            }
             if (_disposed) return;
             var project = projectPath is null ? null : await Task.Run(() => ModProjectInspector.Inspect(projectPath));
             if (_disposed) return;
             if (isolated && projectPath is not null && string.IsNullOrWhiteSpace(project?.Metadata?.PackageId))
-                throw new InvalidOperationException("The selected project needs a readable About.xml with a packageId for an isolated launch.");
+                throw new InvalidOperationException("The selected project needs a readable About.xml with a packageId for a development launch.");
             var packageId = project?.Metadata?.PackageId;
-            var profile = isolated ? await Task.Run(() => DevelopmentProfile.Create(_paths, installation, packageId)) : null;
+            var prepared = isolated ? await Task.Run(() => PersistentDevelopmentProfile.Prepare(_paths, installation, savedProfile!, launchCatalog!, projectPath)) : null;
+            var profile = prepared?.DataDirectory;
             if (_disposed) return;
             session = new CompanionSession();
             _companionSession = session;
-            var options = new GameLaunchOptions(profile, session.ChildEnvironment);
+            var options = new GameLaunchOptions(profile, session.ChildEnvironment, savedProfile?.Game.NativeQuickStart == true);
             using var process = await Task.Run(() => GameProcessLauncher.Start(installation, options));
             var description = $"RimWorld {installation.Version.ShortVersion} (PID {process.Id})";
             if (!_disposed)
             {
                 RuntimeStatus = $"Running {description} from {installation.RootPath}." +
-                    (profile is null ? " Normal game configuration." : $" Separate save-data profile: {profile}");
+                    (profile is null ? " Normal game configuration." : $" Reusable development profile: {profile}. " + (savedProfile?.Game.NativeQuickStart == true ? "Native 1.6 quick test requested; wait for the game to generate its map." : "Main-menu startup."));
                 _log.Info("Runtime", RuntimeStatus);
+                if (prepared is not null) foreach (var warning in prepared.Plan.Warnings) _log.Warning("Profiles", warning);
             }
             monitor = session.MonitorAsync(process.Id, installation.Version, change => Dispatcher.UIThread.Post(() =>
             {
@@ -620,12 +641,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var version = SelectedInstallation?.Model.Version;
-        string[] activeIds = result.Metadata?.PackageId is { Length: > 0 } packageId ? [packageId] : [];
+        var configured = Profile.GameVersion == version?.ShortVersion &&
+            PathComparer.Equals(InstallationProbe.NormalizePath(Profile.InstallationPath), SelectedInstallation?.Model.RootPath ?? string.Empty);
+        var activeIds = (configured ? Profile.ActiveMods.Select(row => row.PackageId) : [])
+            .Concat(result.Metadata?.PackageId is { Length: > 0 } packageId ? new[] { packageId } : [])
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var plan = LoadFoldersReader.Evaluate(document, version ?? GameVersion.Unknown, activeIds);
 
-        var basis = activeIds.Length > 0
-            ? $"only {activeIds[0]} is treated as active; RimPulse does not know the game's real mod list"
-            : "no package ID is known for this mod, so conditional folders cannot be evaluated";
+        var basis = configured
+            ? "the edited development profile's configured mod list; this is not a runtime confirmation"
+            : activeIds.Length > 0
+                ? $"only {activeIds[0]} is treated as active; save a development profile to configure additional dependencies"
+                : "no package ID is known for this mod, so conditional folders cannot be evaluated";
         ProjectDetails.Add(new DetailRow("Load folder basis", basis));
 
         if (plan.VersionText is null)
@@ -770,7 +797,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var sequence = Interlocked.Increment(ref _buildSequence);
         ClearBuildDiagnostics();
         BuildDetails.Clear();
-        BuildStatus = "Building…";
+        BuildStatus = $"Building ({_configuration.BuildConfiguration})…";
 
         // Resolved once: the version folder that decides the output path must not change halfway through a build.
         var target = ResolveOutputDirectory(inspection.RootPath, installation);
@@ -799,6 +826,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             var outputDirectory = target.Path;
+            var release = _configuration.BuildConfiguration == "Release";
+            var emitSymbols = _configuration.EmitDebugSymbols;
             var outcome = await Task.Run(() =>
             {
                 var references = GameReferenceResolver.Resolve(installation);
@@ -824,7 +853,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
                 var inputs = BuildInputDiscovery.Discover(inspection.RootPath, searchDirectories, buildProperties);
                 var build = inputs.HasUnits
-                    ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
+                    ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory, release, emitSymbols))
                     : null;
 
                 // Read the produced assemblies back from metadata, on the same worker thread: this is what the
@@ -1195,7 +1224,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsActivityLogVisible
     {
         get => _isActivityLogVisible;
-        set => SetProperty(ref _isActivityLogVisible, value);
+        set
+        {
+            if (SetProperty(ref _isActivityLogVisible, value)) Settings.ShowActivityLog = value;
+        }
     }
 
     public AsyncRelayCommand RescanCommand { get; }
@@ -1257,8 +1289,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            if (!_suppressSelectionPersistence && _initialized && !GuardProfileDraft())
+            {
+                _suppressSelectionPersistence = true;
+                try { _selectedInstallation = Installations.FirstOrDefault(item => item.Model.RootPath == _configuration.SelectedInstallationPath); }
+                finally { _suppressSelectionPersistence = false; }
+                OnPropertyChanged(nameof(SelectedInstallation));
+                return;
+            }
             RefreshRuntimeCommands();
             RebuildSelectedDetails();
+            if (_initialized) SelectProfileForInstallation();
 
             // The load-folder projection depends on the selected game version.
             if (_lastProjectInspection is { } inspection)
@@ -1325,7 +1366,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return $"RimPulse currently supports RimWorld 1.6 and 1.7. This installation reports {model.VersionDisplay}.";
             }
 
-            return "Installation verified. Select a mod directory in the Mod project tab. Runtime integration is not yet implemented.";
+            return "Installation verified. Configure a reusable development profile, or launch normally from Runtime.";
         }
     }
 
@@ -1368,6 +1409,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 _log.Warning("Configuration", loadResult.Message);
             }
 
+            Settings.Load(_configuration);
+            IsActivityLogVisible = _configuration.ShowActivityLog;
+            if (_log is DiagnosticLog diagnosticLog) diagnosticLog.MinimumLevel = Enum.Parse<LogLevel>(_configuration.MinimumLogLevel);
             PopulateProjects();
 
             foreach (var path in _configuration.ProjectPaths.Where(path => !Directory.Exists(path)).ToArray())
@@ -1389,8 +1433,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
             else
             {
-                _log.Info("Detection", "Automatic installation detection is disabled in the configuration.");
-                StatusMessage = "Automatic installation detection is disabled. Use Re-scan to search anyway.";
+                _log.Info("Detection", "Automatic well-known-location scanning is disabled; restoring saved paths only.");
+                await RescanAsync(cancellationToken: cancellationToken, scanWellKnownLocations: false).ConfigureAwait(true);
             }
         }
         catch (Exception ex)
@@ -1400,13 +1444,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task RescanAsync(string? preferredRootPath = null, CancellationToken cancellationToken = default)
+    private async Task RescanAsync(string? preferredRootPath = null, CancellationToken cancellationToken = default, bool scanWellKnownLocations = true)
     {
         if (IsBusy)
         {
             return;
         }
 
+        if (IsProfileDirty && Installations.Count > 0)
+        {
+            GuardProfileDraft();
+            return;
+        }
         IsBusy = true;
         StatusMessage = "Scanning for RimWorld installations…";
         _log.Info("Detection", "Installation scan started.");
@@ -1418,7 +1467,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                                ?? _configuration.SelectedInstallationPath;
 
             var additionalPaths = _configuration.CustomInstallationPaths.ToArray();
-            var found = await Task.Run(() => _detector.DetectAsync(additionalPaths, cancellationToken), cancellationToken)
+            var found = await Task.Run(() => _detector.DetectAsync(additionalPaths, cancellationToken, scanWellKnownLocations), cancellationToken)
                 .ConfigureAwait(true);
 
             _suppressSelectionPersistence = true;
@@ -1449,7 +1498,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             StatusMessage = Installations.Count == 0
-                ? "No RimWorld installation was found. Add a path manually, or start RimPulse with RIMWORLD_DIR set."
+                ? "No RimWorld installation was found. Add its root directory in Installations."
                 : $"Detected {InstallationCountText}. Last scan: {DateTimeOffset.Now:HH:mm:ss}.";
         }
         catch (OperationCanceledException)
@@ -1609,16 +1658,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _ = SaveConfigurationAsync(CancellationToken.None);
     }
 
-    private async Task SaveConfigurationAsync(CancellationToken cancellationToken)
+    private async Task<bool> SaveConfigurationAsync(CancellationToken cancellationToken)
     {
         try
         {
             await _configurationStore.SaveAsync(_configuration, cancellationToken).ConfigureAwait(true);
+            return true;
         }
         catch (Exception ex)
         {
             _log.Error("Configuration", "Could not save the RimPulse configuration.", ex);
             StatusMessage = "Could not save configuration: " + ex.Message;
+            return false;
         }
     }
 

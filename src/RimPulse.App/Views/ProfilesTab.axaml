@@ -1,0 +1,109 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:RimPulse.App.ViewModels"
+             x:Class="RimPulse.App.Views.ProfilesTab"
+             x:DataType="vm:MainWindowViewModel">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="14" Margin="0,12,0,0">
+      <Border Classes="panel">
+        <StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="4">
+              <SelectableTextBlock Text="DEVELOPMENT PROFILES" Classes="section" />
+              <SelectableTextBlock Text="A reusable mod list, saves and preferences for one installation. Configure here; no environment variables or manual config editing required." Classes="caption" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Save &amp; launch" Classes="accent" Command="{Binding LaunchDevelopmentCommand}" VerticalAlignment="Center" />
+          </Grid>
+          <Grid ColumnDefinitions="240,*,Auto,Auto,Auto" IsEnabled="{Binding CanEditProfile}">
+            <ComboBox ItemsSource="{Binding SavedProfiles}" SelectedItem="{Binding SelectedSavedProfile, Mode=TwoWay}" PlaceholderText="Unsaved profile" HorizontalAlignment="Stretch" />
+            <TextBox Grid.Column="1" Text="{Binding Profile.Name, Mode=TwoWay}" PlaceholderText="Profile name" Margin="8,0,0,0" />
+            <Button Grid.Column="2" Content="New" Classes="quiet" Margin="8,0,0,0" Command="{Binding NewProfileCommand}" />
+            <Button Grid.Column="3" Content="Revert" Classes="quiet" Margin="8,0,0,0" Command="{Binding RevertProfileCommand}" />
+            <Button Grid.Column="4" Content="Save profile" Classes="accent" Margin="8,0,0,0" Command="{Binding SaveProfileCommand}" />
+          </Grid>
+          <SelectableTextBlock Text="{Binding ProfileDraftLabel}" Classes="caption" Foreground="{DynamicResource AccentBrush}" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="{Binding Profile.DataDirectory}" Classes="caption mono" TextWrapping="Wrap" />
+          <SelectableTextBlock Text="{Binding Profile.Status}" Classes="body" TextWrapping="Wrap" MaxHeight="120" />
+        </StackPanel>
+      </Border>
+
+      <Grid ColumnDefinitions="1.2*,*" IsEnabled="{Binding CanEditProfile}">
+        <Border Classes="panel" Margin="0,0,7,0">
+          <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+            <SelectableTextBlock Text="INSTALLED MODS &amp; DLC" Classes="section" />
+            <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,10,0,0">
+              <TextBox Text="{Binding Profile.Search, Mode=TwoWay}" PlaceholderText="Search names, package IDs or paths…" />
+              <Button Grid.Column="1" Content="Refresh catalog" Classes="quiet" Margin="8,0,0,0" Command="{Binding RefreshProfileCatalogCommand}" />
+            </Grid>
+            <SelectableTextBlock Grid.Row="2" Text="{Binding Profile.CatalogStatus}" Classes="caption" TextWrapping="Wrap" Margin="0,8,0,8" MaxHeight="90" />
+            <ListBox Grid.Row="3" Height="330" ItemsSource="{Binding Profile.FilteredMods}" SelectedItem="{Binding Profile.SelectedAvailable, Mode=TwoWay}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProfileModRow">
+                  <Grid ColumnDefinitions="Auto,*">
+                    <CheckBox IsChecked="{Binding IsEnabled, Mode=TwoWay}" IsEnabled="{Binding !Required}" VerticalAlignment="Top" Margin="0,2,6,0" />
+                    <StackPanel Grid.Column="1" Spacing="3">
+                      <SelectableTextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap" />
+                      <SelectableTextBlock Text="{Binding Detail}" Classes="caption mono" TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <StackPanel Grid.Row="4" Spacing="8" Margin="0,10,0,0">
+              <Button Content="Link &amp; add selected project" Classes="quiet" Command="{Binding AddSelectedProjectToProfileCommand}" />
+              <SelectableTextBlock Text="Core and the companion are required. Dependencies are included on save. DLC is opt-in. Only already downloaded Workshop mods can be enabled." Classes="caption" TextWrapping="Wrap" />
+            </StackPanel>
+          </Grid>
+        </Border>
+        <Border Grid.Column="1" Classes="panel" Margin="7,0,0,0">
+          <Grid RowDefinitions="Auto,Auto,*,Auto">
+            <SelectableTextBlock Text="LOAD ORDER" Classes="section" />
+            <SelectableTextBlock Grid.Row="1" Text="Select a mod, then move it. Hard dependencies and forced ordering take precedence; cycles block launch." Classes="caption" TextWrapping="Wrap" Margin="0,8,0,8" />
+            <ListBox Grid.Row="2" Height="330" ItemsSource="{Binding Profile.ActiveMods}" SelectedItem="{Binding Profile.SelectedActive, Mode=TwoWay}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProfileModRow">
+                  <StackPanel Spacing="3">
+                    <SelectableTextBlock Text="{Binding Name}" FontSize="12" TextWrapping="Wrap" />
+                    <SelectableTextBlock Text="{Binding PackageId}" Classes="caption mono" TextWrapping="Wrap" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
+              <Button Content="Move up" Classes="quiet" Command="{Binding Profile.MoveUpCommand}" />
+              <Button Content="Move down" Classes="quiet" Command="{Binding Profile.MoveDownCommand}" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+
+      <Border Classes="panel" IsEnabled="{Binding CanEditProfile}">
+        <StackPanel Spacing="12">
+          <SelectableTextBlock Text="GAME &amp; DEVELOPER SETTINGS — NEXT LAUNCH" Classes="section" />
+          <SelectableTextBlock Text="{Binding ProfileVersionNote}" Classes="caption" TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="*,*">
+            <StackPanel Spacing="9">
+              <CheckBox Content="Native Developer Mode and debug actions" IsChecked="{Binding Profile.DeveloperMode, Mode=TwoWay}" />
+              <CheckBox Content="Open the native developer palette" IsChecked="{Binding Profile.OpenDeveloperPalette, Mode=TwoWay}" IsEnabled="{Binding Profile.CanOpenDeveloperPalette}" />
+              <CheckBox Content="Start directly in a native 1.6 quick-test map" IsChecked="{Binding Profile.NativeQuickStart, Mode=TwoWay}" IsEnabled="{Binding Profile.CanUseNativeQuickStart}" />
+              <CheckBox Content="Pause when a save or map loads" IsChecked="{Binding Profile.PauseOnLoad, Mode=TwoWay}" />
+              <CheckBox Content="Keep running while the game is in the background" IsChecked="{Binding Profile.RunInBackground, Mode=TwoWay}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="9">
+              <CheckBox Content="Verbose game logging" IsChecked="{Binding Profile.VerboseLogging, Mode=TwoWay}" />
+              <CheckBox Content="Let the game reset this profile's mods after a crash" IsChecked="{Binding Profile.ResetModsOnCrash, Mode=TwoWay}" />
+              <CheckBox Content="Fullscreen" IsChecked="{Binding Profile.Fullscreen, Mode=TwoWay}" />
+              <Grid ColumnDefinitions="*,*,*" Margin="0,4,0,0">
+                <StackPanel Spacing="4" Margin="0,0,6,0"><SelectableTextBlock Text="Width" Classes="caption" /><TextBox Text="{Binding Profile.Width, Mode=TwoWay}" /></StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4" Margin="3,0"><SelectableTextBlock Text="Height" Classes="caption" /><TextBox Text="{Binding Profile.Height, Mode=TwoWay}" /></StackPanel>
+                <StackPanel Grid.Column="2" Spacing="4" Margin="6,0,0,0"><SelectableTextBlock Text="UI scale" Classes="caption" /><TextBox Text="{Binding Profile.Scale, Mode=TwoWay}" /></StackPanel>
+              </Grid>
+            </StackPanel>
+          </Grid>
+          <SelectableTextBlock Text="Settings are written only to this profile. Close the game before editing or relaunching. Unrelated game preferences are preserved. God mode, spawning and tick controls remain in the game's native developer tools; RimPulse does not yet automate them." Classes="caption" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <SelectableTextBlock Text="Next milestone work: configurable minimal world/map generation, runtime tick controls and confirmed reloads. None are simulated or reported as implemented here." Classes="caption" TextWrapping="Wrap" Margin="2,0,2,8" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
