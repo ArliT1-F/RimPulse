@@ -133,7 +133,7 @@ compiler invocation.
   `ModOutputDirectoryResolver` in Core. Whether that folder is the only lookup path in 1.7 is part of open
   question 3 below.
 
-### Experimental companion and separate profile (milestone 4)
+### Companion and reusable development profile
 
 | | 1.6 | 1.7 |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ compiler invocation.
 | API used | `LongEventHandler.ExecuteWhenFinished`, `VersionControl.CurrentVersionStringWithRev`, `LoadedModManager.RunningModsListForReading` and each mod's name, package ID and root directory | Same surface is assumed to exist; compatibility and startup timing are **not verified** against a real 1.7 game |
 | Save/config profile | `-savedatafolder=<absolute path>` researched in 1.6 game startup; paths containing `=` are rejected by RimPulse because of the 1.6 argument parser | The same option is used experimentally; real Linux behavior and mod/config loading need verification |
 | Installation `Mods/` | Discovered from the game installation, not the separate save-data directory | Treated as shared; verify on the real game |
-| Companion verification | Synthetic adapter compilation uses .NET 10 stand-ins, **not Mono**; no real game run | Synthetic fake-game build and local IPC exchange only; no real game run |
+| Companion verification | Synthetic adapter compilation uses .NET 10 stand-ins, **not Mono**. User reports linking/launch working, but exact version and IPC readiness are unconfirmed | Synthetic fake-game build and local IPC exchange only; no confirmed real 1.7 run |
 
 The 1.6 startup, mod discovery and argument behavior above were researched read-only in
 [32bitx64bit's 1.6 decompilation](https://github.com/32bitx64bit/RW-Decompiled-1.6); game code belongs to
@@ -150,9 +150,22 @@ also discuss shared Mods and platform preference limitations. In the 1.6 code pa
 snapshot after startup static constructors, but this is **not evidence that the main menu appeared or all mods
 initialized successfully**. RimPulse's 1.7 timing and API assumptions require a real installation.
 
-RimPulse writes a fresh version-stamped `ModsConfig.xml` containing Core, its companion and the selected
-project. It does not resolve dependencies or select DLC; the game may enable newly discovered expansions itself.
-Subsequent isolated launches make new profiles. Separate save data does not sandbox the game or mods. Engine preferences and logs may remain shared. In
+RimPulse now reuses a named profile's data directory. Its GUI selects installed mods/DLC, resolves declared
+dependencies and validates hard load order before writing a version-stamped `ModsConfig.xml`. Installed but
+unselected official expansions are recorded as known to prevent 1.6 auto-activation. Only exposed preference
+fields are merged; unrelated preferences and saves are retained. Normal launch does not apply this profile.
+The legacy fresh `runtime-sessions` creator remains in Core but is not used by the new GUI flow.
+
+Native Developer Mode is a game preference, not an IPC command. The optional 1.6 `-quicktest` path was
+researched in `GenCommandLine`, `QuickStarter` and `Root_Play.SetupForQuickTestPlay`: it generates a normal
+world (Crashlanded, Cassandra/Rough, 30% coverage, random seed/tile) and a **250×250 map**. It is not a minimal
+sandbox. The native developer palette can be requested through `quickStartDevPaletteOn`. God mode, spawning
+and tick actions remain native runtime tools; RimPulse does not automate or confirm them.
+
+On 1.7, native quick test is disabled and the checkbox explains why. The same save-data/preference approach
+is experimental until checked against real Waylith behavior. No 1.7 quick-test equivalence is inferred.
+
+Separate save data does not sandbox the game or mods. Engine preferences and logs may remain shared. In
 [xtzhyhydwl/RimWorld_auto_test](https://github.com/xtzhyhydwl/RimWorld_auto_test)'s independent **Windows**
 1.7 experiment, `-logFile` was reportedly ignored and the default `Player.log` remained shared; that observation
 is not proof of Linux behavior. Verify both versions and actual log locations locally before relying on them.
@@ -233,7 +246,7 @@ The layout and version facts are implemented and tested:
 - `RimPulse.Core.Projects.LoadFoldersReader` — version sections and conditions, as documented by the wiki;
   used to show which content folders a version would load.
 - `RimPulse.Companion/` — shared status client and separately compiled 1.6/1.7 source adapters.
-- `RimPulse.Core.Runtime` and `IPC` — explicit links, experimental fresh profiles, Linux child launch and
+- `RimPulse.Core.Runtime` and `IPC` — explicit links, reusable profiles, catalog/order planning, Linux child launch and
   authenticated startup snapshots. None is verified against an actual game for this increment.
 
 No hot reload, testing-map or game-command implementation exists yet.

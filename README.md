@@ -43,15 +43,15 @@ This is the planned workflow; see the status below for what is implemented today
 
 ## Project status
 
-This repository is being built incrementally, one milestone at a time. Features below describe implemented behavior; new changes still need a fresh build and test run.
+This repository is being built incrementally, one milestone at a time. Features below describe implemented behavior; verification is recorded separately from real-game reports.
 
 | Milestone | Scope | State |
 | --- | --- | --- |
 | **1 — Foundation** | Avalonia desktop shell, configuration persistence, RimWorld installation detection (1.6 / 1.7), installation selection UI, Linux-first build | **Implemented** |
-| 2 — Project management | Mod project directories, `About.xml` parsing, structure detection, dependency detection, file monitoring | **In progress** — multiple-project inspection and monitoring implemented; dependency resolution remains |
+| 2 — Project management | Mod project directories, `About.xml` parsing, structure detection, dependency detection, file monitoring | **In progress** — multiple-project inspection and monitoring implemented; installed-mod dependency closure and load-order planning now available in Profiles |
 | 3 — Build & validation | `.csproj` detection, game reference resolution, Roslyn compilation, XML validation, assembly inspection | **In progress** — changed-file XML syntax checks plus conservative per-file `Defs` structure checks |
-| 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | **In progress / experimental** — opt-in 1.6/1.7 companions, local IPC and separate profiles implemented; real-game verification pending |
-| 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | Not started |
+| 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | **In progress** — opt-in companions, authenticated startup IPC and reusable GUI-configured profiles implemented; companion linking/game launch reported working on a user machine, exact version and IPC readiness unconfirmed |
+| 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | **Started** — persistent profile preferences, native Developer Mode and explicit 1.6 quick test; minimal maps, app-driven spawning/ticks and reset remain |
 | 6 — Live reload | Asset reload, definition reload, assembly reload research per version, restart fallback | Not started |
 | 7 — Packaging | AppImage, `.deb`, desktop entry, Windows packaging | Not started |
 
@@ -75,7 +75,8 @@ This repository is being built incrementally, one milestone at a time. Features 
 - Interprets `LoadFolders.xml`: version sections (`<v1.6>`, `<v1.7>`), `IfModActive` / `IfModActiveAny` /
   `IfModActiveAll` / `IfModNotActive` conditions and the legacy `_steam` suffix, projected onto the selected
   installation's version. Folders that a condition excludes are listed with that condition, never dropped
-  silently; RimPulse only knows the mod itself is active, so it says so instead of guessing a mod list.
+  silently. The projection uses the edited profile's configured mod list when its installation/version match,
+  and labels that as a configuration projection rather than runtime confirmation.
 - Monitors the selected directory, batches and classifies changes, refreshes metadata when `About.xml` changes, and checks changed XML for well-formedness. Files under `Defs/` also get conservative checks for a `<Defs>` or `<Patch>` root and duplicate explicit `defName` values within the same definition type in that file; this is not game-schema validation and does not resolve cross-file or vanilla-game inheritance.
 - Finds the mod's `.csproj` projects, resolves the game assemblies of the selected installation and **compiles
   the mod in-process with Roslyn**, reporting every diagnostic with file, line and column. A build writes the
@@ -97,23 +98,24 @@ This repository is being built incrementally, one milestone at a time. Features 
 - Writes a build's **inputs, reference set, first diagnostics and error-code histogram** to the log, so a
   failed build can be diagnosed from the log file alone (the summary line only carries counts).
 - Launches the selected 1.6 or 1.7 Linux executable directly and displays its process ID and exit code. Only
-  one launch can be monitored at a time. A normal launch uses the normal configuration; an optional experimental
-  launch uses a separate save-data profile. Closing RimPulse leaves the game running.
+  one launch can be monitored at a time. A normal launch uses the normal configuration; development launch
+  reuses the selected profile's separate save-data directory. Closing RimPulse leaves the game running.
 - Opt-in setup builds a companion against the selected installation and links it into the game's `Mods/` folder.
   A launch-specific, authenticated loopback connection reports the game's version and a **startup-only snapshot**
   of running mods, with separate indicators for process, companion and selected-project match. A live process or
   even a companion snapshot is not proof that the main menu loaded or that every mod initialized successfully.
-  Synthetic tests exercise both build paths and the 1.7 protocol; neither companion has been verified in a real game.
+  Synthetic tests exercise both build paths and the 1.7 protocol. A user reports companion linking and game launch working; the exact game version, authenticated IPC and main-menu readiness remain unconfirmed.
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
-- The solution build and official tests passed in GitHub Actions for code commit `9a9cc1d`; real-game checks remain.
+- The solution build and official tests passed in GitHub Actions for implementation commit `51d50b3`; feature-specific real-game checks remain.
 
 ### Deliberately not there yet
 
-No automatic mod/dependency or DLC resolution, no persistent reusable development profile, no complete XML
-schema/semantic validation or cross-file `defName`/inheritance checks, no live mod-list updates, hot reload,
-in-game command channel or testing environment. These are later work; a startup snapshot is not a live reload.
+No mod downloads, complete XML schema/semantic validation or cross-file `defName`/inheritance checks,
+no live mod-list updates, hot reload or in-game command channel. Native Developer Mode and the 1.6 quick
+test are available, but the planned minimal sandbox, app-driven spawning/tick controls and reset are not.
+A startup snapshot is not a live reload or proof of map readiness.
 
 ---
 
@@ -230,43 +232,52 @@ Each candidate is inspected, not trusted:
 Directories discovered automatically that are not usable installations are ignored. Paths **you** add are
 always reported, together with the reason they cannot be used.
 
-## Experimental companion and development profile (Linux)
+## Reusable development profiles (Linux)
 
-This workflow is implemented but **not yet verified against actual 1.6/1.7 game installations**. Back up your
-normal RimWorld configuration and saves before testing. A separate save-data profile is **not a security
-sandbox**: game logs, Unity/engine preferences and arbitrary mods may still use shared paths, and 1.7 behavior
-needs verification. The game's installation `Mods/` folder remains shared.
+Configuration is managed **inside the app**. A profile belongs to one installation and major.minor game
+version, and reuses its own save-data directory across launches. It is not a security sandbox: the game's
+installation `Mods/` folder, engine preferences, logs and arbitrary mod code can still use shared paths.
+Back up normal saves before trying a new game version.
 
-1. Select an installation and development project. Optionally **Build mod** first; this writes to the project's
-   assembly output as described above.
-2. In **Runtime**, explicitly choose **Install companion link**. RimPulse compiles its 1.6 or 1.7 adapter
-   against that installation, writes an installation-specific generated mod under its state directory, and creates a symlink named
-   `Mods/RimPulse.Companion`. It will not replace a pre-existing unrelated file, directory or link.
-3. If your selected project is not already discoverable by the game, explicitly choose **Link selected project**.
-   This creates a separate `Mods/RimPulse-Dev-<hash>` symlink without replacing an existing path. Avoid duplicate
-   copies of the same package ID; a package ID match alone is not proof that the selected directory loaded.
-4. Choose **Launch isolated development**. RimPulse requires its companion link and a build stamped for the
-   selected game version; reinstall it after a game update. A fresh profile is created under RimPulse's state
-   directory for **each** launch; its initial `ModsConfig.xml` selects Core, the companion and the selected project's
-   package ID. RimPulse does not select other mods, dependencies or DLC; the game may enable newly discovered
-   expansions itself. Add what you need in that game's mod menu and restart as required. A restart that creates
-   a new process is not monitored by the old session; a later isolated launch creates another fresh profile.
-5. Watch the separate process and companion statuses. Once connected, inspect the game-reported version and
-   startup mod list. A project is matched only when both its package ID and directory agree. The snapshot is
-   repeated as a heartbeat but **does not update during the session**. A connection confirms neither main-menu
-   readiness nor successful mod initialization. If it never connects, inspect the game log and RimPulse log.
+1. Select an installation and mod project. Optionally **Build mod** first.
+2. In **Runtime**, choose **Install / rebuild companion**. This compiles against the selected game's real
+   assemblies and creates a no-overwrite `Mods/RimPulse.Companion` link. Rebuild after a game update.
+3. In **Profiles**, create or select a profile. **Refresh catalog** reads official content/DLC, local mods and
+   already downloaded Workshop mods from known Steam libraries. Search and check the mods you want.
+   **Link & add selected project** explicitly links the chosen development directory when needed.
+4. Core and the companion are required. Saving includes transitive declared dependencies, validates
+   missing/incompatible mods and hard-order cycles, and honors forced ordering. Advisory ordering is applied
+   when it does not create a cycle. Use **Move up/down** for your preferred order; hard constraints win.
+   DLC is opt-in. Installed but unselected expansions are recorded as known so 1.6 does not auto-enable them.
+   Duplicate package IDs use official/local/Workshop precedence and are reported; a selected project must be
+   the directory the game will actually discover.
+5. Set Developer Mode, native developer palette, pause-on-load, background execution, verbose logging,
+   crash mod-reset behavior and display size/scale. **Native 1.6 quick test** is optional and uses `-quicktest`:
+   RimWorld generates a normal world and a **250×250 map**. This is not the planned minimal sandbox.
+   On 1.7 quick test is disabled; normal startup is retained and preference compatibility needs verification.
+6. Choose **Save profile** to retain the draft, or **Save & launch development** to validate, save and launch.
+   A failed save/validation does not launch. The profile's `Config/ModsConfig.xml` and exposed `Prefs.xml`
+   fields are rewritten at launch; unrelated preferences and existing saves are preserved. Close the game
+   before editing or relaunching. A process spawned by an in-game restart is not attached to the old session.
+7. Watch process, companion and project-match status separately. The authenticated startup snapshot reports
+   running mods, not main-menu/map readiness or successful initialization of every mod. **Launch normally**
+   remains separate and does not apply managed development preferences or rewrite normal mod configuration.
 
-**Launch RimWorld normally** instead uses your normal configuration and only loads the companion if it is enabled there.
-Installing a symlink alone does not change your normal `ModsConfig.xml`. On leaving RimPulse the game remains
-running, and the companion eventually stops trying to reconnect. See [`docs/IPC.md`](docs/IPC.md) for the
-wire contract and security limits.
+**Settings** exposes startup scanning, activity-panel visibility, minimum diagnostic level, Release
+optimization and portable PDB emission. Save explicitly. Release changes Roslyn optimization and implicit
+`DEBUG`/`TRACE` defines, not full MSBuild Configuration evaluation; explicit project defines remain intact.
+Turning startup scanning off still restores remembered/custom paths. Paths are shown for troubleshooting;
+manual JSON editing is not part of the workflow.
+
+Profile data lives at `<RimPulse state>/development-profiles/<id>/data`. Older `runtime-sessions` directories
+are retained, not migrated or deleted. Removing a profile from configuration does not erase its saves.
 
 ### Cleanup
 
 With the game and RimPulse closed, inspect `Mods/RimPulse.Companion` and `Mods/RimPulse-Dev-<hash>` and remove
 **only those links that point to the directories you chose**; do not follow the links or delete the target
 project. Remove no other mod files. The generated companion lives under `<RimPulse state>/companion/` and
-retained per-launch save/config profiles under `<RimPulse state>/runtime-sessions/`; inspect and back up
+reusable profiles under `<RimPulse state>/development-profiles/` (older launches may also have `runtime-sessions/`); inspect and back up
 anything you want before deleting those state subdirectories. They are not removed automatically.
 
 ## Where RimPulse stores data
@@ -359,10 +370,12 @@ RimPulse without an explicit licensing decision.
 
 | Check | Result |
 | --- | --- |
-| Full `dotnet build` / official `dotnet test` for these changes | **Passed in GitHub Actions** on Ubuntu with .NET 10 for code commit `9a9cc1d`. The local development environment lacks the SDK and NuGet access. |
-| Core and companion synthetic checks | **Partial** — Core compiled and 283 cases passed with a temporary .NET 10/Roslyn reflection harness and xUnit-compatible shims. Synthetic 1.6/1.7 references exercise both companion build paths; an in-process fake 1.7 game completes the authenticated snapshot exchange. These are not real game assemblies or an official SDK test run. |
-| Avalonia desktop | **Build passed in CI**, including XAML and compiled bindings; the updated UI has not been exercised in a real desktop session. |
-| Real installations | **Not verified for this increment** — build and load both companions, verify isolated profile behavior and check status on real Linux 1.6 and 1.7 installations. A process, connection or startup snapshot alone does not demonstrate main-menu readiness or successful mod initialization. |
+| Full `dotnet build` / official `dotnet test` | **Passed in GitHub Actions** on Ubuntu/.NET 10 for implementation commit `51d50b3`, including Avalonia/XAML compiled bindings and the pinned Roslyn package. |
+| Supplementary local checks | **295 cases passed** with SDK 10.0.400's Roslyn 5.9 and a temporary reflection/xUnit-compatible harness. This was not the official test runner; CI above is authoritative. |
+| Desktop interaction | **Not verified here** — no display server was available for visual/input testing. |
+| Real companion/link/launch | **User-reported working** — exact game version, authenticated IPC, main-menu readiness and mod initialization remain unconfirmed. |
+| Reusable profiles / native quick test | **Automated checks passed; real-game verification pending** — persistence, preferences, DLC, dependencies/order and 1.6 launch arguments are covered. Quick test is a normal-world/250×250-map path, not a minimal sandbox. |
+| 1.7 | **Unverified** — normal startup only; native quick test is disabled. |
 | Windows / macOS runtime launch | **Not implemented** — direct launch and companion setup are currently Linux-only. |
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md#7-verification-status) for commands and the real-game checklist.
