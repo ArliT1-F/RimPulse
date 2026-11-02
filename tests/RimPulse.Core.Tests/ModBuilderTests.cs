@@ -283,4 +283,61 @@ public sealed class ModBuilderTests
                        && problem.Contains("is referenced twice by the project", StringComparison.Ordinal));
         Assert.True(File.Exists(first));
     }
+
+    [Fact]
+    public void Build_ExplainsAProjectThatDeclaresTypesTheGameAlreadyProvides()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod</AssemblyName>
+              </PropertyGroup>
+            </Project>
+            """);
+
+        // A hand-written stand-in for the game's API, compiled next to a real assembly that already has the type.
+        temp.CreateFile("Source/TestMod/VerseDoubles.cs", """
+            namespace Verse;
+            public static class Translator
+            {
+                public static string Translate(string key) => key;
+            }
+            """);
+        temp.CreateFile("Source/TestMod/Usage.cs", """
+            namespace TestMod;
+            public static class Usage
+            {
+                public static string Call() => Verse.Translator.Translate("key");
+                public static int Broken = "not an int";
+            }
+            """);
+
+        var gameSource = temp.CreateFile("libsrc/Game/Game.cs", """
+            namespace Verse;
+            public static class Translator
+            {
+                public static string Translate(string key) => key;
+            }
+            """);
+        var libraryDirectory = temp.Combine("Game", "Managed");
+        Directory.CreateDirectory(libraryDirectory);
+        var gameLibrary = Path.Combine(libraryDirectory, "Game.dll");
+        var library = ModCompiler.Compile(
+            new CompileRequest("Game", [gameSource], RuntimeReferences(), OutputPath: gameLibrary),
+            TestContext.Current.CancellationToken);
+        Assert.True(library.Succeeded, string.Join(Environment.NewLine, library.Problems));
+
+        var inputs = BuildInputDiscovery.Discover(temp.Root);
+        var result = ModBuilder.Build(
+            new ModBuildPlan(inputs.Units, [.. RuntimeReferences(), gameLibrary], null),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Diagnostics, diagnostic => diagnostic.Id == "CS0436");
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("copies of types the game already provides", StringComparison.Ordinal));
+    }
 }

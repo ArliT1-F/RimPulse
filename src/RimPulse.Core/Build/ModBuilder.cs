@@ -123,6 +123,17 @@ public static class ModBuilder
                     problems.Add($"{unit.AssemblyName} did not compile; dependent projects were not built.");
                 }
 
+                // CS0436 means the project's own sources re-declare a type the reference set already provides —
+                // a hand-written stand-in for the game's API compiled next to the real thing. The compiler then
+                // reports every use of it as ambiguous, which buries the cause under hundreds of errors.
+                if (compilation.Diagnostics.Any(diagnostic => diagnostic.Id == DuplicateTypeWarning))
+                {
+                    problems.Add(
+                        $"{unit.AssemblyName}: the project defines its own copies of types the game already " +
+                        "provides (CS0436), so the two sets cannot be used side by side. Exclude the stand-in " +
+                        "sources from this project, or stop compiling it against the game assemblies.");
+                }
+
                 break;
             }
 
@@ -251,6 +262,9 @@ public static class ModBuilder
             problems.Add(note);
         }
     }
+
+    /// <summary>Roslyn's "type conflicts with the imported type" warning, reported at every use of the type.</summary>
+    private const string DuplicateTypeWarning = "CS0436";
 
     /// <summary>
     /// True for assemblies the game or the framework owns, so a project-local copy must not shadow them.

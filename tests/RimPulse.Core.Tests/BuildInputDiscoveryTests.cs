@@ -109,7 +109,7 @@ public sealed class BuildInputDiscoveryTests
     public void Discover_ExpandsRelativeGlobsAndKeepsSdkDefaultSources()
     {
         using var temp = new TempDirectory();
-        temp.CreateFile("Tests/PowerGridManager.Tests.csproj", """
+        temp.CreateFile("Tests/PowerGridManager.Compatibility.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <ItemGroup>
                 <Compile Include="../Source/PowerGridManager/**/*.cs" />
@@ -172,7 +172,7 @@ public sealed class BuildInputDiscoveryTests
     public void Discover_AppliesCompileExcludeAndRemoveGlobs()
     {
         using var temp = new TempDirectory();
-        temp.CreateFile("Tests/Mod.Tests.csproj", """
+        temp.CreateFile("Tests/Mod.Analyzers.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <ItemGroup>
                 <Compile Include="../Linked/**/*.cs" Exclude="../Linked/Generated/**/*.cs" />
@@ -511,6 +511,104 @@ public sealed class BuildInputDiscoveryTests
 
         Assert.Empty(result.Units);
         Assert.Contains(result.Problems, problem => problem.Contains("not well-formed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Discover_LeavesOutATestProjectAndSaysWhy()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod</AssemblyName>
+              </PropertyGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+        temp.CreateFile("Tests/TestMod.Tests/TestMod.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net472</TargetFramework>
+                <AssemblyName>TestMod.Tests</AssemblyName>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="xunit" Version="2.9.2" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Tests/TestMod.Tests/Doubles/VerseDoubles.cs", "// stand-in for RimWorld's API");
+        temp.CreateFile("Tests/TestMod.Tests/TranslatorTests.cs", "// test");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Equal("TestMod", unit.AssemblyName);
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("TestMod.Tests.csproj", StringComparison.Ordinal)
+                       && problem.Contains("test project", StringComparison.Ordinal)
+                       && problem.Contains("not built", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Discover_LeavesOutAProjectThatOnlyLooksLikeATestProjectByItsPackages()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><AssemblyName>TestMod</AssemblyName></PropertyGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+        temp.CreateFile("Source/Verification/Verification.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><AssemblyName>Verification</AssemblyName></PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/Verification/Harness.cs", "// test harness");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Equal("TestMod", unit.AssemblyName);
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("Verification.csproj", StringComparison.Ordinal)
+                       && problem.Contains("test project", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Discover_LeavesOutAProjectThatDeclaresItselfATestProject()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><AssemblyName>TestMod</AssemblyName></PropertyGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "// mod");
+        temp.CreateFile("Source/Harness/Harness.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <AssemblyName>Harness</AssemblyName>
+                <IsTestProject>true</IsTestProject>
+              </PropertyGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/Harness/Harness.cs", "// test harness");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Equal("TestMod", unit.AssemblyName);
+        Assert.Contains(
+            result.Problems,
+            problem => problem.Contains("Harness.csproj", StringComparison.Ordinal)
+                       && problem.Contains("test project", StringComparison.Ordinal));
     }
 
     [Fact]

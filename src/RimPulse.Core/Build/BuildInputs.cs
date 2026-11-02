@@ -209,6 +209,29 @@ public static class BuildInputDiscovery
         IEnumerable<XElement> ProjectItems(string name)
             => Items(root, name, properties, displayName, problems);
 
+        // Read straight from the project file: detection must not evaluate conditions a second time, because an
+        // unevaluable condition is reported and would then be reported twice.
+        IEnumerable<string> DeclaredPackageIds()
+            => root.Elements()
+                .Where(element => element.Name.LocalName == "ItemGroup")
+                .SelectMany(group => group.Elements().Where(item => item.Name.LocalName == "PackageReference"))
+                .Select(item => item.Attribute("Include")?.Value?.Trim())
+                .OfType<string>()
+                .Where(identifier => identifier.Length > 0);
+
+        // A test project is not part of what the game loads, and it normally compiles its own stand-ins for the
+        // game's API (a fake Verse/RimWorld/Unity that keeps the tests runnable without an installation).
+        // Compiling it against the real game assemblies can only produce duplicate-type errors, so it is
+        // reported and left out instead of being built.
+        if (IsTestProject(displayName, GetProperty("IsTestProject"), DeclaredPackageIds()))
+        {
+            problems.Add(
+                $"{displayName} is a test project, so it was not built: the game never loads it, and a test " +
+                "project normally compiles its own stand-ins for the game's API, which cannot be compiled " +
+                "against the installation's real assemblies.");
+            return null;
+        }
+
         var assemblyName = GetProperty("AssemblyName")
                            ?? Path.GetFileNameWithoutExtension(projectFile);
 
@@ -394,6 +417,45 @@ public static class BuildInputDiscovery
             string.Equals(GetProperty("AllowUnsafeBlocks"), "true", StringComparison.OrdinalIgnoreCase),
             IsNullableEnabled(GetProperty("Nullable")));
     }
+
+    /// <summary>
+    /// True for a project that is a test harness rather than part of the mod the game loads: it declares
+    /// <c>IsTestProject</c>, references a known test framework package, or follows the <c>*.Tests</c> naming
+    /// convention. Such a project must never be compiled into the mod's <c>Assemblies</c> folder, and its
+    /// sources usually define stand-ins for the game's own types.
+    /// </summary>
+    private static bool IsTestProject(
+        string projectFileName, string? isTestProjectProperty, IEnumerable<string> packageIds)
+    {
+        if (string.Equals(isTestProjectProperty, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        foreach (var packageId in packageIds)
+        {
+            if (TestFrameworkPackageIds.Any(
+                    known => packageId.StartsWith(known, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        var name = Path.GetFileNameWithoutExtension(projectFileName);
+
+        return name.EndsWith(".Tests", StringComparison.OrdinalIgnoreCase)
+               || name.EndsWith(".Test", StringComparison.OrdinalIgnoreCase)
+               || name.Equals("Tests", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly string[] TestFrameworkPackageIds =
+    [
+        "Microsoft.NET.Test.Sdk",
+        "Microsoft.Testing.Platform",
+        "xunit",
+        "nunit",
+        "mstest",
+    ];
 
     private static bool IsNullableEnabled(string? value)
         => value is not null

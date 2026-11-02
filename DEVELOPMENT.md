@@ -130,6 +130,7 @@ Keep published output out of Git (`artifacts/` is ignored).
 | Window does not open on Wayland | Compositor/backend issue | Try `AVALONIA_X11=1` in a X11 session, or run under XWayland |
 | Configuration not saved | Config directory not writable | Check the paths in §4 and the log file for the `Error` entry |
 | Build fails with hundreds of `CS0246` / `CS0103` errors | A dependency is not in the reference set — usually a `PackageReference` that has not been restored, or an assembly the project only declares behind a condition | Read the `Build` entry in the log: it lists the projects, the reference set, the first diagnostics and an error-code histogram, and names any package it could not resolve |
+| Build fails with hundreds of `CS0436`, `CS0104` and `CS0121` errors, all in one project | That project compiles its own stand-ins for the game's API (`Verse.*`, `RimWorld.*`, `UnityEngine.*`) while the installation's real assemblies are in the reference set too, so every type it duplicates is ambiguous | RimPulse names such a project in one line and leaves test projects out of the build (`IsTestProject`, a test-framework `PackageReference`, or a `*.Tests` project name). For any other project, exclude the stand-in sources from the compilation or stop referencing the game in it |
 | Build error count is in the log but not the errors | Older logs only recorded the summary line | Every build now writes its detail block below the summary; check that the app you run is current |
 | Unexpected behaviour | — | Read the activity log first, then the log file; both record detection, configuration and UI errors |
 
@@ -154,10 +155,10 @@ Honest accounting of how the current code has been verified. Update this section
 | C# syntax of all sources | Verified | `dotnet build` passes in CI on every push |
 | XAML / MSBuild / solution files | Verified | The app, including the project list and build panel AXAML, compiles in CI (compiled bindings turn binding typos into build errors) |
 | `dotnet build` of the solution | Verified | GitHub Actions, Release configuration |
-| `dotnet test` of the suite | Verified | GitHub Actions, Release configuration, 177 tests; includes the `LoadFolders`, build-input, reference-resolution, Roslyn compiler and assembly-inspection tests |
+| `dotnet test` of the suite | Verified | GitHub Actions, Release configuration; includes the `LoadFolders`, build-input, test-project detection, reference-resolution, Roslyn compiler and assembly-inspection tests |
 | Credits catalog completeness | Verified | Encoded as tests (`CreditsCatalogTests`) and re-checked on every push |
 | Opening the desktop window | Verified for the previous milestone | Run on Linux with a real desktop session; the new project list and build panel need the same treatment |
-| Building a mod against a real installation | **Not verified** | The compiler is tested against the test runtime's assemblies; a build against real 1.6/1.7 game assemblies has not been run |
+| Building a mod against a real installation | **Partially verified** | One real 1.6.4871 (`rev598`) run compiled the mod's own assembly against the installation (3 `CS0618` deprecation warnings), while its `*.Tests` project produced 712 errors: hand-written game stand-ins compiled next to the real assemblies. Test projects are now left out of a build and the duplicate-type cause is reported, both covered by tests in this change; that real-installation run has not been repeated yet |
 | Installation detection against a real RimWorld 1.6 install | **Not verified** | Requires a machine with the game installed |
 | Installation detection against a real RimWorld 1.7 install | **Not verified** | Requires a machine with the game installed |
 | Runtime behaviour (launching the game, IPC, reload) | Not implemented | Milestones 4–6 |
