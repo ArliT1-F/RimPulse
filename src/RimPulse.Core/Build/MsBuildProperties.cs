@@ -134,6 +134,38 @@ public sealed class MsBuildPropertySet
         return false;
     }
 
+    /// <summary>Selects the first matching <c>When</c>, or the <c>Otherwise</c> branch when none match.</summary>
+    internal XElement? SelectChooseBranch(XElement choose, string sourceName, List<string>? problems = null)
+    {
+        ArgumentNullException.ThrowIfNull(choose);
+        XElement? otherwise = null;
+        foreach (var branch in choose.Elements())
+        {
+            if (branch.Name.LocalName == "Otherwise")
+            {
+                otherwise ??= branch;
+                continue;
+            }
+
+            if (branch.Name.LocalName != "When")
+            {
+                problems?.Add($"{sourceName}: unsupported <{branch.Name.LocalName}> inside <Choose>; it was ignored.");
+                continue;
+            }
+
+            if (branch.Attribute("Condition") is null)
+            {
+                problems?.Add($"{sourceName}: a <When> inside <Choose> has no Condition and was ignored.");
+                continue;
+            }
+
+            if (EvaluateCondition(branch, sourceName, problems))
+                return branch;
+        }
+
+        return otherwise;
+    }
+
     /// <summary>Resolves a possibly relative, possibly backslash-separated path against a directory.</summary>
     internal static string? ResolvePath(string directory, string path)
     {
@@ -219,8 +251,10 @@ public sealed class MsBuildPropertySet
                     break;
 
                 case "Choose":
-                    problems.Add(
-                        $"{Path.GetFileName(filePath)}: <Choose> is not evaluated; the properties and items inside it were ignored.");
+                    if (SelectChooseBranch(element, Path.GetFileName(filePath), problems) is { } branch)
+                    {
+                        EvaluateElements(branch, filePath, directory, problems, depth);
+                    }
                     break;
 
                 default:

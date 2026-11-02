@@ -13,7 +13,7 @@ public sealed class XmlFileValidatorTests
         temp.CreateFile("Defs/Test.xml", "<Defs><Unknown /></Defs>");
         var result = XmlFileValidator.Check(temp.Root, Path.Combine("Defs", "Test.xml"));
         Assert.Equal(XmlCheckStatus.WellFormed, result.Status);
-        Assert.Contains("syntax only", result.Message, StringComparison.Ordinal);
+        Assert.Contains("game semantics not checked", result.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -25,6 +25,23 @@ public sealed class XmlFileValidatorTests
         temp.CreateFile("Defs/Test.xml", text);
         var result = XmlFileValidator.Check(temp.Root, Path.Combine("Defs", "Test.xml"));
         Assert.Equal(XmlCheckStatus.Failed, result.Status);
+    }
+
+    [Theory]
+    [InlineData("<Defs><ThingDef><defName>Thing_A</defName></ThingDef></Defs>", XmlCheckStatus.WellFormed)]
+    [InlineData("<Defs><ThingDef><defName>Shared</defName></ThingDef><RecipeDef><defName>Shared</defName></RecipeDef></Defs>", XmlCheckStatus.WellFormed)]
+    [InlineData("<Patch><Operation Class=\"PatchOperationSequence\" /></Patch>", XmlCheckStatus.WellFormed)]
+    [InlineData("<LanguageData><key>value</key></LanguageData>", XmlCheckStatus.Failed)]
+    [InlineData("<Defs><ThingDef><defName>A</defName></ThingDef><ThingDef><defName>A</defName></ThingDef></Defs>", XmlCheckStatus.Failed)]
+    [InlineData("<Defs><ThingDef><defName>A</defName><defName>B</defName></ThingDef></Defs>", XmlCheckStatus.Failed)]
+    public void Check_AppliesBasicStructureRulesToDefsFiles(string text, XmlCheckStatus expected)
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Defs/Test.xml", text);
+        var result = XmlFileValidator.Check(temp.Root, Path.Combine("Defs", "Test.xml"));
+        Assert.Equal(expected, result.Status);
+        if (expected == XmlCheckStatus.Failed)
+            Assert.NotEmpty(result.Message);
     }
 
     [Fact]

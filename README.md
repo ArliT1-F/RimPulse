@@ -49,7 +49,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 | --- | --- | --- |
 | **1 — Foundation** | Avalonia desktop shell, configuration persistence, RimWorld installation detection (1.6 / 1.7), installation selection UI, Linux-first build | **Implemented** |
 | 2 — Project management | Mod project directories, `About.xml` parsing, structure detection, dependency detection, file monitoring | **In progress** — single-project inspection and monitoring implemented; multiple projects remain |
-| 3 — Build & validation | `.csproj` detection, game reference resolution, Roslyn compilation, XML validation, assembly inspection | **In progress** — basic changed-file XML syntax checks only |
+| 3 — Build & validation | `.csproj` detection, game reference resolution, Roslyn compilation, XML validation, assembly inspection | **In progress** — changed-file XML syntax checks plus conservative per-file `Defs` structure checks |
 | 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | Not started |
 | 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | Not started |
 | 6 — Live reload | Asset reload, definition reload, assembly reload research per version, restart fallback | Not started |
@@ -76,7 +76,7 @@ This repository is being built incrementally, one milestone at a time. Features 
   `IfModActiveAll` / `IfModNotActive` conditions and the legacy `_steam` suffix, projected onto the selected
   installation's version. Folders that a condition excludes are listed with that condition, never dropped
   silently; RimPulse only knows the mod itself is active, so it says so instead of guessing a mod list.
-- Monitors the selected directory, batches and classifies changes, refreshes metadata when `About.xml` changes, and checks changed XML files for well-formedness (not RimWorld semantics).
+- Monitors the selected directory, batches and classifies changes, refreshes metadata when `About.xml` changes, and checks changed XML for well-formedness. Files under `Defs/` also get conservative checks for a `<Defs>` or `<Patch>` root and duplicate explicit `defName` values within the same definition type in that file; this is not game-schema validation and does not resolve cross-file or vanilla-game inheritance.
 - Finds the mod's `.csproj` projects, resolves the game assemblies of the selected installation and **compiles
   the mod in-process with Roslyn**, reporting every diagnostic with file, line and column. A build writes the
   assembly into the mod's `Assemblies` folder — or `1.6/Assemblies` when the mod keeps a folder for the selected
@@ -103,8 +103,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 
 ### Deliberately not there yet
 
-No dependency resolution against installed mods, no XML schema/semantic validation, no game launching, hot
-reload or testing environment. Those are later milestones; nothing in the UI pretends otherwise.
+No dependency resolution against installed mods, no complete XML schema/semantic validation or cross-file `defName`/inheritance checks, no game launching, hot reload or testing environment. Those are later milestones; nothing in the UI pretends otherwise.
 
 ---
 
@@ -191,8 +190,8 @@ precedence over a stale environment variable or project path written for another
 items include SDK-style default source discovery and explicit literal paths or MSBuild-style globs (`*` and
 `?` within a path segment, and `**` as a recursive path segment), including relative paths, semicolon-separated
 patterns, `Exclude` and `Remove`. `Reference` with `HintPath`, `ProjectReference` and `PackageReference` are
-read too. Item/string functions, `Choose` and MSBuild targets are not evaluated; anything ignored is reported
-rather than guessed at.
+read too. `Choose` processes the first true `When` branch and uses `Otherwise` only when no branch matches.
+Item/string functions and MSBuild targets are not evaluated; anything ignored is reported rather than guessed at.
 
 Every piece of text in the window is selectable: drag to select and press Ctrl+C, including compiler
 diagnostics, paths and log lines. **Copy all errors** next to **Build mod** copies the complete diagnostic
@@ -248,7 +247,7 @@ src/
     Projects/             Mod metadata, content folders and LoadFolders.xml interpretation
     Monitoring/           Batched file notifications and classification
     Build/                Project discovery, game reference resolution, Roslyn compilation
-    Validation/           Changed XML well-formedness checks
+    Validation/           Changed XML syntax and basic Defs structure checks
   RimPulse.App/           Avalonia desktop application (MVVM, hand-written, no MVVM framework)
     Views/ ViewModels/ Styles/ Converters/ Services/
 tests/

@@ -404,6 +404,34 @@ public sealed class BuildInputDiscoveryTests
     }
 
     [Fact]
+    public void Discover_UsesItemsFromTheFirstMatchingChooseBranch()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
+              <Choose>
+                <When Condition="'$(Configuration)' == 'Release'"><PropertyGroup><Flavor>release</Flavor></PropertyGroup></When>
+                <When Condition="'$(Configuration)' == 'Debug'"><PropertyGroup><Flavor>debug</Flavor></PropertyGroup></When>
+                <Otherwise><PropertyGroup><Flavor>fallback</Flavor></PropertyGroup></Otherwise>
+              </Choose>
+              <Choose>
+                <When Condition="'$(Flavor)' == 'debug'"><ItemGroup><Compile Include="DebugOnly.cs" /></ItemGroup></When>
+                <Otherwise><ItemGroup><Compile Include="Other.cs" /></ItemGroup></Otherwise>
+              </Choose>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/DebugOnly.cs", "// selected");
+        temp.CreateFile("Source/TestMod/Other.cs", "// not selected");
+
+        var result = BuildInputDiscovery.Discover(temp.Root);
+
+        var unit = Assert.Single(result.Units);
+        Assert.Equal(new[] { Path.GetFullPath(temp.Combine("Source/TestMod/DebugOnly.cs")) }, unit.SourceFiles);
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
     public void Discover_EvaluatesAConditionalPropertyElement()
     {
         using var temp = new TempDirectory();

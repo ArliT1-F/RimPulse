@@ -256,6 +256,45 @@ public sealed class MsBuildPropertiesTests
     }
 
     [Fact]
+    public void Evaluate_SelectsFirstMatchingChooseBranchAndFallsBackToOtherwise()
+    {
+        using var temp = new TempDirectory();
+        var project = temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <Choose>
+                <When Condition="'$(Configuration)' == 'Release'"><PropertyGroup><Flavor>release</Flavor></PropertyGroup></When>
+                <When Condition="'$(Configuration)' == 'Debug'"><PropertyGroup><Flavor>debug</Flavor></PropertyGroup></When>
+                <Otherwise><PropertyGroup><Flavor>fallback</Flavor></PropertyGroup></Otherwise>
+              </Choose>
+            </Project>
+            """);
+
+        var problems = new List<string>();
+        var properties = MsBuildPropertySet.Evaluate(project, problems);
+
+        Assert.Equal("debug", properties.Get("Flavor"));
+        Assert.Empty(problems);
+    }
+
+    [Fact]
+    public void Evaluate_UsesOtherwiseWhenNoChooseConditionMatches()
+    {
+        using var temp = new TempDirectory();
+        var project = temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <Choose>
+                <When Condition="'$(Configuration)' == 'Release'"><PropertyGroup><Flavor>release</Flavor></PropertyGroup></When>
+                <Otherwise><PropertyGroup><Flavor>debug-fallback</Flavor></PropertyGroup></Otherwise>
+              </Choose>
+            </Project>
+            """);
+
+        var properties = MsBuildPropertySet.Evaluate(project);
+
+        Assert.Equal("debug-fallback", properties.Get("Flavor"));
+    }
+
+    [Fact]
     public void Expand_KeepsAPropertyItCannotResolve()
     {
         using var temp = new TempDirectory();

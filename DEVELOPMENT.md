@@ -204,12 +204,13 @@ comment.
 
 ## 11. Next steps (milestone 3 and beyond)
 
-1. **XML validation** — changed XML is checked for well-formedness only. Definition-level checks (root
-   elements, `defName` uniqueness, `Abstract`/`ParentName` references) and RimWorld schema validation remain.
+1. **XML validation** — changed XML is checked for well-formedness; files under `Defs/` also get conservative
+   root (`Defs`/`Patch`) and within-file duplicate `defName` checks (grouped by definition type). Cross-file
+   uniqueness, `Abstract`/`ParentName` resolution against the mod and game, and RimWorld schema validation remain.
 2. **Build fidelity** — the MSBuild subset RimPulse understands is documented in the README. Properties,
    `Directory.Build.props`, imported props files, conditions, SDK default sources and common `Compile` globs
-   (`*`, `?`, `**`, relative directories, `Exclude` and `Remove`) are evaluated. `Choose`, MSBuild targets,
-   item/string functions, wildcard imports and metadata-dependent item expressions are not.
+   (`*`, `?`, `**`, relative directories, `Exclude` and `Remove`) and first-match `Choose` branches are evaluated.
+   MSBuild targets, item/string functions, wildcard imports and metadata-dependent item expressions are not.
 3. **Dependency resolution** — declared dependencies are displayed, not resolved against installed mods; the
    load-folder projection currently treats only the mod itself as active.
 4. **Runtime integration (milestone 4)** — companion mod, IPC and process management. Compilation is the last
