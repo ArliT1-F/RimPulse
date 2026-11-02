@@ -117,6 +117,33 @@ done
 [[ -x "$appdir/usr/bin/rimpulse" ]] || fail "AppImage launcher is not executable"
 pass "AppDir has the expected layout and executables"
 
+# 5b. Exercise the real appimagetool code path with a stub. The tag workflow supplies the pinned real
+# tool; this checks the invocation (ARCH, flags, arguments) and the produced image without a download.
+fake_tool="$work/fake-appimagetool"
+cat >"$fake_tool" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'ARCH=%s\n' "${ARCH:-}" >"$FAKE_LOG"
+last=""
+for arg in "$@"; do
+    printf '%s\n' "$arg" >>"$FAKE_LOG"
+    last="$arg"
+done
+printf 'fake appimage\n' >"$last"
+EOF
+chmod 755 -- "$fake_tool"
+fake_log="$work/appimagetool.log"
+FAKE_LOG="$fake_log" "$PACKAGING_LINUX_DIR/build-appimage.sh" --publish-dir "$publish" \
+    --version 0.0.0-test --arch amd64 --output "$output" \
+    --appimagetool "$fake_tool" --extract-and-run >/dev/null || fail "AppImage build path failed"
+image="$output/RimPulse-0.0.0-test-x86_64.AppImage"
+[[ -s "$image" && -x "$image" ]] || fail "no executable AppImage was produced"
+grep -qx 'ARCH=x86_64' "$fake_log" || fail "appimagetool was not invoked with ARCH=x86_64"
+for expected in '--appimage-extract-and-run' '--no-appstream' 'RimPulse-0.0.0-test-amd64.AppDir' "$image"; do
+    grep -qF -- "$expected" "$fake_log" || fail "appimagetool invocation lost '$expected'"
+done
+pass "appimagetool invocation and resulting image are correct (stub tool)"
+
 # 6. Refusals: an unrelated directory and a payload with an escaping symlink must not be packaged.
 if "$PACKAGING_LINUX_DIR/build-deb.sh" --publish-dir "$work" --version 0.0.0-test --output "$output" \
     >/dev/null 2>&1; then

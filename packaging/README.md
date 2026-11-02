@@ -73,8 +73,9 @@ digest). Tag builds produce a **draft** GitHub Release, not a published one; see
 
 Both Linux packages refuse a publish directory that lacks the `RimPulse` apphost,
 `RimPulse.dll` or `RimPulse.runtimeconfig.json`, and refuse symlinks that escape the payload. `verify.sh`
-exercises those refusals, both dependency sets, the `.deb` control archive and the AppDir layout using a
-fake payload, so packaging regressions are caught on every push without a .NET SDK.
+exercises those refusals, both dependency sets, the `.deb` control archive, the AppDir layout and the
+`appimagetool` invocation (with a stub tool) using a fake payload, so packaging regressions are caught on
+every push without a .NET SDK.
 
 ## Verification status (read this before distributing)
 
