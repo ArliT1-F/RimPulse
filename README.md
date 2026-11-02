@@ -79,9 +79,10 @@ This repository is being built incrementally, one milestone at a time. Features 
 - Monitors the selected directory, batches and classifies changes, refreshes metadata when `About.xml` changes, and checks changed XML files for well-formedness (not RimWorld semantics).
 - Finds the mod's `.csproj` projects, resolves the game assemblies of the selected installation and **compiles
   the mod in-process with Roslyn**, reporting every diagnostic with file, line and column. A build writes the
-  assembly into the mod's `Assemblies` folder only when you press **Build** and only after compilation
-  succeeded. The produced assembly is then read back from its metadata (name, version, references, types), so
-  the build panel shows what the game would actually load.
+  assembly into the mod's `Assemblies` folder — or `1.6/Assemblies` when the mod keeps a folder for the selected
+  installation's version — only when you press **Build** and only after compilation succeeded. The produced
+  assembly is then read back from its metadata (name, version, references, types), so the build panel shows
+  what the game would actually load.
 - Leaves out a project that is a test harness rather than part of the mod — it declares `IsTestProject`,
   references xunit/NUnit/MSTest, or is named `*.Tests` — and says so in one line. The game never loads such an
   assembly, and those projects usually compile their own stand-ins for the game's API, which cannot be
@@ -165,9 +166,15 @@ not invent a folder list for that version.
 
 **Build mod** compiles the mod's C# projects against the selected installation and writes the resulting
 assemblies into the mod's `Assemblies` folder — the only place RimPulse ever writes inside a mod directory, and
-only as a direct result of pressing the button. Projects are compiled in dependency order, so a referenced
-project is built first and the projects that reference it are linked against that output. Diagnostics are
-listed with file, line and column. `DEBUG` and `TRACE` are defined, matching a development build.
+only as a direct result of pressing the button. When the mod uses version folders, the output follows the
+selected installation: a folder named after its `major.minor` (e.g. `1.6`) becomes the mod root for that
+version, so the assembly is written to `1.6/Assemblies` instead of the top-level `Assemblies` folder. Without
+a matching version folder, the top-level `Assemblies` folder is used. `LoadFolders.xml` does not pick the
+output folder — RimPulse reports the folders a version would load, but writes to the version folder (or the
+root), and the build panel states the exact path before you press **Build**. Projects are compiled in
+dependency order, so a referenced project is built first and the projects that reference it are linked
+against that output. Diagnostics are listed with file, line and column. `DEBUG` and `TRACE` are defined,
+matching a development build.
 
 RimPulse evaluates the part of MSBuild a mod project actually uses, and properties are evaluated before the
 items that read them. In MSBuild's order: the properties MSBuild itself provides (`Configuration` is `Debug`,

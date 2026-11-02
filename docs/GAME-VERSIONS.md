@@ -128,7 +128,10 @@ compiler invocation.
 - A failed build records its inputs, reference set, first diagnostics and an error-code histogram in the log
   (`BuildLogReport`); the summary line the app used to log alone only contained counts.
 - Mod assemblies are emitted to the mod's `Assemblies/` folder, which is where both versions load a mod's
-  DLLs. Whether that folder is the only lookup path in 1.7 is part of open question 3 below.
+  DLLs. When the mod keeps version folders, the folder of the selected installation's `major.minor` (`1.6`)
+  replaces the mod root, so the output goes to `1.6/Assemblies/`; the resolution is
+  `ModOutputDirectoryResolver` in Core. Whether that folder is the only lookup path in 1.7 is part of open
+  question 3 below.
 
 ### Assembly reload (milestone 6) — the hard problem
 

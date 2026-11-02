@@ -280,8 +280,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ? "Select a project and a usable installation to build."
         : SelectedInstallation?.Model is { IsUsable: true } installation
             ? $"Compiles against {installation.DisplayName} ({installation.VersionDisplay}) and writes to " +
-              $"{Path.Combine(_lastProjectInspection.RootPath, "Assemblies")}."
+              $"{ResolveOutputDirectory(_lastProjectInspection.RootPath, installation).Path}."
             : "Select a usable RimWorld installation: a mod can only be compiled against real game assemblies.";
+
+    /// <summary>
+    /// The folder this mod's next build writes to: the version folder's <c>Assemblies</c> when the mod has one
+    /// for the selected installation's version (e.g. <c>1.6/Assemblies</c>), otherwise the root one.
+    /// </summary>
+    private static ModOutputDirectory ResolveOutputDirectory(string modRootPath, RimWorldInstallation installation)
+        => ModOutputDirectoryResolver.Resolve(modRootPath, installation.Version);
 
     public bool HasBuildDiagnostics => BuildDiagnostics.Count > 0;
 
@@ -543,7 +550,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ClearBuildDiagnostics();
         BuildDetails.Clear();
         BuildStatus = "Building…";
-        _log.Info("Build", $"Building '{inspection.RootPath}' against {installation.DisplayName} ({installation.VersionDisplay}).");
+
+        // Resolved once: the version folder that decides the output path must not change halfway through a build.
+        var target = ResolveOutputDirectory(inspection.RootPath, installation);
+        _log.Info(
+            "Build",
+            $"Building '{inspection.RootPath}' against {installation.DisplayName} ({installation.VersionDisplay}) " +
+            $"into '{target.Path}'.");
 
         try
         {
@@ -564,7 +577,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 BuildDiagnostics.Add(row);
             }
 
-            var outputDirectory = Path.Combine(inspection.RootPath, "Assemblies");
+            var outputDirectory = target.Path;
             var outcome = await Task.Run(() =>
             {
                 var references = GameReferenceResolver.Resolve(installation);
@@ -698,6 +711,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             if (outcome.build.Succeeded)
             {
+                // The exact files that were written, first in the details: the assembly rows below only show the
+                // file name, which does not say which folder the version rule picked.
+                if (outcome.build.OutputPaths.Count > 0)
+                {
+                    BuildDetails.Insert(0, new DetailRow(
+                        "Wrote",
+                        string.Join(Environment.NewLine, outcome.build.OutputPaths)));
+                }
+
                 _log.Info("Build", report.Message, report.Detail);
             }
             else
@@ -774,6 +796,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 : "none selected");
 
         builder.Append("Result: ").AppendLine(BuildStatus);
+
+        // Which folder the DLLs went to was previously only visible in the build panel, so a pasted report could
+        // not answer "where is the built mod?".
+        builder.Append("Output: ")
+            .AppendLine(_lastProjectInspection is { } inspected && SelectedInstallation?.Model is { IsUsable: true } targetInstallation
+                ? ResolveOutputDirectory(inspected.RootPath, targetInstallation).Path
+                : "not resolved (no usable installation selected)");
 
         builder.Append("Copied: ")
             .AppendLine(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture));
