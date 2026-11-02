@@ -41,13 +41,14 @@ RimPulse.Core/Projects      About.xml metadata, content folders, LoadFolders.xml
 RimPulse.Core/Monitoring    FileSystemWatcher with debouncing and change classification
 RimPulse.Core/Build         .csproj discovery, game reference resolution, Roslyn compilation
 RimPulse.Core/Validation    changed-file XML syntax and conservative Defs structure checks
+RimPulse.Core/Runtime       direct Linux game process launch
 ```
 
 Planned for later milestones (none of this exists yet):
 
 ```text
 RimPulse.Core/Validation    RimWorld schema and definition-level diagnostics
-RimPulse.Core/Runtime       process launch/management, runtime state machine
+RimPulse.Core/Runtime       managed development configuration, runtime state machine
 RimPulse.Core/IPC           versioned JSON protocol shared with the companion mods
 RimPulse.Backends/          RimWorld16 · RimWorld17 (version-specific implementations of the above)
 RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
@@ -80,7 +81,8 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | Build | `ModBuilder`, `ModBuildPlan`, `ModBuildResult` | Compiles the units in order, feeding each output to the projects that reference it |
 | Build | `ModOutputDirectory`, `ModOutputDirectoryResolver` | Decides where the DLLs go: the version folder's `Assemblies` folder when the mod has one for the selected installation's version (`1.6/Assemblies`), else the mod root's |
 | Build | `AssemblyInspector`, `AssemblyInspection`, `AssemblyTypeInfo` | Reads a produced assembly's name, version, references and types with `System.Reflection.Metadata`; the assembly is never loaded into RimPulse, so inspecting a mod cannot run its code |
-| App | `MainWindowViewModel` | Installation list, selection, custom path entry, project list, inspection, monitoring, build, activity log mirror, status text |
+| Runtime | `GameProcessLauncher` | Validates and starts the selected Linux game executable, returning a process handle for exit monitoring |
+| App | `MainWindowViewModel` | Installation list, selection, project inspection, monitoring, build, game process status and activity log |
 | App | `ProjectRow`, `BuildDiagnosticRow` | Presentation projections of the project list and build output |
 | App | `InstallationViewModel`, `DetailRow`, `ProblemRow` | Presentation projections of installation results |
 
@@ -219,8 +221,9 @@ Attribution policy (also shown in the app):
 - **Companion mods** — one per game version (`RimPulse.Companion.RimWorld16` targeting the 1.6 runtime,
   `RimPulse.Companion.RimWorld17` targeting `net10.0`), sharing a versioned JSON IPC contract that lives in
   Core so both sides are compiled against the same definitions.
-- **Process management** — the game process is owned by RimPulse, launched with a managed development
-  configuration, and its exit is treated as a normal state transition, never as a crash of the desktop app.
+- **Process management** — direct Linux launches and process exit monitoring are implemented. The game
+  uses its ordinary configuration and remains running if RimPulse closes; RimPulse does not attach to an
+  existing process or infer game readiness. Managed development configuration remains future work.
 - **Reload policy** — asset/definition/assembly reload are separate capabilities with an explicit
   `stable / experimental / unsupported` rating per game version; a restart is always preferable to an
   unsafe unload.

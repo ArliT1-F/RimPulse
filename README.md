@@ -48,9 +48,9 @@ This repository is being built incrementally, one milestone at a time. Features 
 | Milestone | Scope | State |
 | --- | --- | --- |
 | **1 — Foundation** | Avalonia desktop shell, configuration persistence, RimWorld installation detection (1.6 / 1.7), installation selection UI, Linux-first build | **Implemented** |
-| 2 — Project management | Mod project directories, `About.xml` parsing, structure detection, dependency detection, file monitoring | **In progress** — single-project inspection and monitoring implemented; multiple projects remain |
+| 2 — Project management | Mod project directories, `About.xml` parsing, structure detection, dependency detection, file monitoring | **In progress** — multiple-project inspection and monitoring implemented; dependency resolution remains |
 | 3 — Build & validation | `.csproj` detection, game reference resolution, Roslyn compilation, XML validation, assembly inspection | **In progress** — changed-file XML syntax checks plus conservative per-file `Defs` structure checks |
-| 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | Not started |
+| 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | **In progress** — direct Linux launch and process exit monitoring; no companion or IPC yet |
 | 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | Not started |
 | 6 — Live reload | Asset reload, definition reload, assembly reload research per version, restart fallback | Not started |
 | 7 — Packaging | AppImage, `.deb`, desktop entry, Windows packaging | Not started |
@@ -96,6 +96,7 @@ This repository is being built incrementally, one milestone at a time. Features 
   copy and reported, never silently duplicated.
 - Writes a build's **inputs, reference set, first diagnostics and error-code histogram** to the log, so a
   failed build can be diagnosed from the log file alone (the summary line only carries counts).
+- Launches the selected 1.6 or 1.7 Linux executable directly and displays the process ID and exit code. Only one launch from RimPulse can be monitored at a time. The game uses its normal configuration; close it normally to save. Closing RimPulse leaves it running. A process being alive does not mean the game or any mod is loaded. This has not yet been verified against real game installations.
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
@@ -103,7 +104,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 
 ### Deliberately not there yet
 
-No dependency resolution against installed mods, no complete XML schema/semantic validation or cross-file `defName`/inheritance checks, no game launching, hot reload or testing environment. Those are later milestones; nothing in the UI pretends otherwise.
+No dependency resolution against installed mods, no complete XML schema/semantic validation or cross-file `defName`/inheritance checks, no companion mod, IPC, managed mod configuration, loaded-mod reporting, hot reload or testing environment. Those are later milestones; nothing in the UI pretends otherwise.
 
 ---
 

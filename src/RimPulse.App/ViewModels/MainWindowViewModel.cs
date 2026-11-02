@@ -11,6 +11,7 @@ using RimPulse.Core.Installations;
 using RimPulse.Core.Projects;
 using RimPulse.Core.Monitoring;
 using RimPulse.Core.Validation;
+using RimPulse.Core.Runtime;
 
 namespace RimPulse.App.ViewModels;
 
@@ -53,6 +54,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool _isBuilding;
     private string _buildStatus = "No build has run yet.";
     private long _buildSequence;
+    private bool _runtimeRunning;
+    private string _runtimeStatus = "No game launched by RimPulse.";
 
     /// <summary>
     /// Upper bound on rows added to the build diagnostics list. A single failed build can report over a thousand
@@ -138,10 +141,59 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && CanRemoveSelectedCustomPath,
             HandleCommandException);
 
+        LaunchGameCommand = new AsyncRelayCommand(LaunchGameAsync,
+            () => !_runtimeRunning && SelectedInstallation?.IsReady == true, HandleCommandException);
+
         ToggleCreditsCommand = new RelayCommand(() => IsCreditsOpen = !IsCreditsOpen);
         ToggleActivityLogCommand = new RelayCommand(() => IsActivityLogVisible = !IsActivityLogVisible);
 
         _log.EntryWritten += OnLogEntry;
+    }
+
+    public AsyncRelayCommand LaunchGameCommand { get; }
+
+    public string RuntimeStatus
+    {
+        get => _runtimeStatus;
+        private set => SetProperty(ref _runtimeStatus, value);
+    }
+
+    private async Task LaunchGameAsync()
+    {
+        var installation = SelectedInstallation?.Model;
+        if (installation is null || _runtimeRunning) return;
+        _runtimeRunning = true;
+        RuntimeStatus = $"Starting RimWorld {installation.Version.ShortVersion} from {installation.RootPath}…";
+        LaunchGameCommand.RaiseCanExecuteChanged();
+        try
+        {
+            using var process = await Task.Run(() => GameProcessLauncher.Start(installation));
+            var description = $"RimWorld {installation.Version.ShortVersion} (PID {process.Id})";
+            if (!_disposed)
+            {
+                RuntimeStatus = $"Running {description} from {installation.RootPath}.";
+                _log.Info("Runtime", RuntimeStatus);
+            }
+            await process.WaitForExitAsync();
+            if (!_disposed)
+            {
+                RuntimeStatus = $"{description} exited with code {process.ExitCode}.";
+                _log.Info("Runtime", RuntimeStatus);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!_disposed)
+            {
+                RuntimeStatus = "Could not launch or monitor the game: " + ex.Message;
+                _log.Error("Runtime", RuntimeStatus, ex);
+            }
+        }
+        finally
+        {
+            _runtimeRunning = false;
+            if (!_disposed) LaunchGameCommand.RaiseCanExecuteChanged();
+        }
     }
 
     public ObservableCollection<ProjectChangeRow> ProjectChanges { get; }
@@ -1034,6 +1086,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            LaunchGameCommand.RaiseCanExecuteChanged();
             RebuildSelectedDetails();
 
             // The load-folder projection depends on the selected game version.
