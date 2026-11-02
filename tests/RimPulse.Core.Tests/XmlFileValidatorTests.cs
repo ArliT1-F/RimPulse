@@ -44,6 +44,32 @@ public sealed class XmlFileValidatorTests
             Assert.NotEmpty(result.Message);
     }
 
+    [Theory]
+    [InlineData("<Defs><ThingDef Name=\"Base\" ParentName=\"Base\" /></Defs>", true)]
+    [InlineData("<Defs><ThingDef Name=\"Base\" ParentName=\"Other\" /></Defs>", false)]
+    [InlineData("<Defs><ThingDef Name=\"Base\" ParentName=\"base\" /></Defs>", false)]
+    [InlineData("<Defs><ThingDef Name=\"\" ParentName=\"\" /></Defs>", false)]
+    [InlineData("<Patch><Operation Name=\"Base\" ParentName=\"Base\" /></Patch>", false)]
+    public void Check_WarnsAboutPossibleDirectSelfParentWithoutClaimingResolution(string text, bool warning)
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Defs/Test.xml", text);
+        var result = XmlFileValidator.Check(temp.Root, Path.Combine("Defs", "Test.xml"));
+        Assert.Equal(XmlCheckStatus.WellFormed, result.Status);
+        Assert.Equal(warning, result.Message.Contains("Possible inheritance cycle", StringComparison.Ordinal));
+        if (warning) Assert.Contains("parent resolution was not checked", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Check_DoesNotApplyInheritanceWarningOutsideDefs()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Other/Test.xml", "<Defs><ThingDef Name=\"Base\" ParentName=\"Base\" /></Defs>");
+        var result = XmlFileValidator.Check(temp.Root, Path.Combine("Other", "Test.xml"));
+        Assert.Equal(XmlCheckStatus.WellFormed, result.Status);
+        Assert.DoesNotContain("inheritance cycle", result.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Check_DoesNotCheckMissingNonXmlOrOutsidePaths()
     {

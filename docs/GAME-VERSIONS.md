@@ -216,6 +216,18 @@ but the harness that drives them differs: 1.6 needs a companion mod running on M
 one compiled against the 1.7 reference set. RimPulse keeps two companion source adapters and one shared
 protocol; the exact real-game compatibility of each still needs testing.
 
+For 1.6, read-only inspection of [`GenFilePaths`](https://github.com/32bitx64bit/RW-Decompiled-1.6/blob/main/Verse/GenFilePaths.cs)
+shows `.rws` saves under the save-data `Saves` directory and `.rsc` scenarios under `Scenarios`. The profile
+importer copies user-selected files there; it does not generate or validate them. The game must load them.
+The 1.7 paths and actual isolated-profile behavior are not verified on a real installation.
+
+The 1.6 scenario editor's [`ScenPart_IncidentBase`](https://github.com/32bitx64bit/RW-Decompiled-1.6/blob/main/RimWorld/ScenPart_IncidentBase.cs)
+selects from loaded incident definitions. [`IncidentWorker`](https://github.com/32bitx64bit/RW-Decompiled-1.6/blob/main/RimWorld/IncidentWorker.cs)
+checks matching disable-incident scenario parts when storyteller settings are not bypassed. This is not a
+universal switch for all caravan movement, manually triggered incidents, or mod code. Faction and settlement
+generation are separate concerns. No game code was copied, and RimPulse does not yet create or apply these
+rules. The same behavior must not be assumed for 1.7 without verification.
+
 ## 4. Open questions to answer against a real installation
 
 Keep this list current; each item blocks or shapes a later milestone.

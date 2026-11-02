@@ -379,11 +379,11 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <SelectableTextBlock Text="Compiles the mod's C# projects against the selected installation's assemblies. XML is validated for syntax only; nothing is reloaded into a running game yet." Classes="caption" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="Compiles the mod's C# projects against the selected installation's assemblies. Changed XML is checked by the file monitor, not by the build; nothing is reloaded into a running game yet." Classes="caption" TextWrapping="Wrap" />
 
                   <SelectableTextBlock Text="FILE MONITOR" Classes="section" Margin="0,8,0,0" />
                   <SelectableTextBlock Text="{Binding MonitorStatus}" Classes="caption" TextWrapping="Wrap" />
-                  <SelectableTextBlock Text="Recent changes (latest 250). XML syntax is checked only; no build or reload is performed." Classes="caption" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="Recent changes (latest 250). XML syntax and basic Defs structure are checked; no build or reload is performed." Classes="caption" TextWrapping="Wrap" />
                   <ItemsControl ItemsSource="{Binding ProjectChanges}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:ProjectChangeRow">

@@ -102,7 +102,7 @@ every push without a .NET SDK.
 | `.deb` structure and control fields | **Verified locally and in CI** with `dpkg-deb --contents` / `--field` |
 | AppDir layout | **Verified locally and in CI** with `--appdir-only` |
 | Real `dotnet publish` output staged into a `.deb` | **User-reported success** | A user ran `dotnet publish src/RimPulse.App -c Release -r linux-x64 --self-contained true` and `build-deb.sh --version 0.7.0 --arch amd64` on their machine; both succeeded. Installing or launching that `.deb` was not reported. The release workflow also builds it on tags. |
-| Real `dotnet publish` output staged into an AppImage | **Not yet verified** | Built by the release workflow on tags; no real AppImage has been built or run on a desktop here. |
+| Real `dotnet publish` output staged into an AppImage | **User-reported build success; launch not verified** | A user built the `linux-x64` AppImage with `appimagetool --appimage-extract-and-run`; running it was not reported. |
 | Installing and launching on Linux Mint 22.x (X11 and Wayland), AppImage/FUSE, icon theme integration | **Not verified.** No desktop session was available |
 | Windows ZIP and Inno Setup installer | **Prepared, not built or run.** Requires a Windows host |
 | Published GitHub Release | **Not published automatically** — tag builds create a draft only |

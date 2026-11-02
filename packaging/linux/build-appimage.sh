@@ -129,4 +129,8 @@ ARCH="$appimage_arch" "$appimagetool" "${tool_args[@]}" "$appdir" "$image"
 [[ -s "$image" ]] || die "appimagetool finished without producing '$image'."
 chmod 755 -- "$image"
 info "Wrote $image"
-info "Run it with: ./$image (or: APPIMAGE_EXTRACT_AND_RUN=1 ./$image on systems without FUSE)"
+# OUTPUT_DIR is absolute. Quote for Bash so the displayed commands also work with spaces or shell
+# metacharacters in the output directory; never prepend './' to an absolute path.
+printf -v quoted_image '%q' "$image"
+info "Run it with: $quoted_image"
+info "Without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 $quoted_image"
