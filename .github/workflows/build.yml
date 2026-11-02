@@ -31,6 +31,14 @@ jobs:
         shell: bash
         run: dotnet test RimPulse.slnx -c Release 2>&1 | tee test.log
 
+      # Packaging is SDK-free to smoke test: a fake publish payload exercises the scripts, metadata,
+      # icon generator and .deb/AppDir layout. Real publish + packaging happens on tags in release.yml.
+      - name: Packaging smoke test
+        shell: bash
+        run: |
+          python3 packaging/generate-icons.py --check 2>&1 | tee packaging.log
+          bash packaging/linux/verify.sh 2>&1 | tee -a packaging.log
+
       # Diagnostics are published as a commit comment because job logs and artifacts are not reachable
       # from every environment that needs to read them.
       - name: Report failures
@@ -45,7 +53,7 @@ jobs:
             echo
             echo "Commit: \`${GITHUB_SHA}\`"
             echo
-            for log in restore.log build.log test.log; do
+            for log in restore.log build.log test.log packaging.log; do
               [ -f "$log" ] || continue
               echo "### $log (last 150 lines)"
               echo '```text'

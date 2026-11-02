@@ -1,0 +1,186 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version, for example 0.7.0'
+        required: true
+        default: '0.0.0-dev'
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # appimagetool 1.9.1, verified against the upstream release asset digest. Tag builds must not silently
+  # switch to a different tool; bump this pin (and the URL) deliberately.
+  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve package version
+        id: resolve
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version="$INPUT_VERSION"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          if ! [[ "$version" =~ ^[0-9][0-9A-Za-z.+~-]*$ ]]; then
+            echo "Invalid package version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Package version: $version"
+
+  linux:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Packaging smoke test
+        run: |
+          python3 packaging/generate-icons.py --check
+          bash packaging/linux/verify.sh
+
+      - name: Publish self-contained linux-x64
+        run: dotnet publish src/RimPulse.App -c Release -r linux-x64 --self-contained true -o artifacts/publish/linux-x64
+
+      - name: Build .deb
+        run: |
+          bash packaging/linux/build-deb.sh \
+            --publish-dir artifacts/publish/linux-x64 \
+            --version "${{ needs.version.outputs.version }}" \
+            --arch amd64 \
+            --runtime self-contained \
+            --output artifacts/packages
+
+      - name: Install AppImage build dependencies
+        run: sudo apt-get update && sudo apt-get install -y squashfs-tools
+
+      - name: Download and verify appimagetool
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" "$APPIMAGETOOL_URL"
+          echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/appimagetool"
+
+      - name: Build AppImage
+        run: |
+          bash packaging/linux/build-appimage.sh \
+            --publish-dir artifacts/publish/linux-x64 \
+            --version "${{ needs.version.outputs.version }}" \
+            --arch amd64 \
+            --runtime self-contained \
+            --output artifacts/packages \
+            --appimagetool "$RUNNER_TEMP/appimagetool" \
+            --extract-and-run
+
+      - name: Write checksums
+        shell: bash
+        run: |
+          cd artifacts/packages
+          sha256sum rimpulse_*_amd64.deb RimPulse-*.AppImage > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: artifacts/packages/*
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish self-contained win-x64
+        run: dotnet publish src/RimPulse.App -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
+
+      - name: Build portable ZIP
+        shell: pwsh
+        run: |
+          ./packaging/windows/build-zip.ps1 `
+            -PublishDir artifacts/publish/win-x64 `
+            -Version "${{ needs.version.outputs.version }}" `
+            -OutputDir artifacts/packages
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: artifacts/packages/*
+          if-no-files-found: error
+
+  draft-release:
+    # Only tag pushes create a release, and only as a draft: the upstream license is not yet declared,
+    # so a human must review the packages and the licensing note before publishing anything.
+    if: github.event_name == 'push'
+    needs: [version, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/packages
+          merge-multiple: true
+
+      - name: Write draft release notes
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## RimPulse __VERSION__
+
+          Linux `.deb` and AppImage, plus a portable Windows ZIP. See `packaging/README.md` for what each
+          package contains and how to build them locally.
+
+          **Verification:** packaging scripts and metadata are covered by `packaging/linux/verify.sh` on
+          every push. Installing and launching the published application on Linux Mint (X11/Wayland),
+          AppImage/FUSE behaviour and the Windows ZIP were **not** verified in CI. Milestones 5–6
+          (testing environment and live reload) are still incomplete.
+
+          **Do not publish this draft as-is:** the upstream repository does not ship a LICENSE file yet.
+          Choose and publish a license, replace the `License: UNKNOWN` stanza in
+          `packaging/linux/copyright`, and review the in-app Credits panel first.
+          EOF
+          sed -i "s/__VERSION__/$VERSION/" release-notes.md
+
+      - name: Create draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "RimPulse $VERSION" \
+            --notes-file release-notes.md \
+            artifacts/packages/*

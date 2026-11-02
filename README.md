@@ -53,7 +53,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 | 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | **In progress** — opt-in companions, authenticated startup IPC and reusable GUI-configured profiles implemented; companion linking/game launch reported working on a user machine, exact version and IPC readiness unconfirmed |
 | 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | **Started** — persistent profile preferences, native Developer Mode and explicit 1.6 quick test; minimal maps, app-driven spawning/ticks and reset remain |
 | 6 — Live reload | Asset reload, definition reload, assembly reload research per version, restart fallback | Not started |
-| 7 — Packaging | AppImage, `.deb`, desktop entry, Windows packaging | Not started |
+| 7 — Packaging | AppImage, `.deb`, desktop entry, Windows packaging | **Implemented (packaging)** — `.deb`, AppImage, portable Windows ZIP and installer source built from `dotnet publish`; installation on a real desktop and the license decision remain unverified |
 
 ### What actually works today
 
@@ -109,6 +109,9 @@ This repository is being built incrementally, one milestone at a time. Features 
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
 - The solution build and official tests passed in GitHub Actions for implementation commit `51d50b3`; feature-specific real-game checks remain.
+- Builds a Linux `.deb`, an AppImage and a portable Windows ZIP from `dotnet publish` output, with a
+  freedesktop desktop entry, hicolor icons, generated artwork and an SDK-free packaging smoke test in CI
+  (see [Packaging](#packaging)); installation on a real desktop is not verified.
 
 ### Deliberately not there yet
 
@@ -144,6 +147,27 @@ If your game is not in a Steam or GOG library, open **Installations**, enter its
 no environment variable or manual JSON editing is needed for normal use.
 
 Full build, test, publish and troubleshooting instructions live in [`DEVELOPMENT.md`](DEVELOPMENT.md).
+
+## Packaging
+
+Milestone 7 builds installable packages from a self-contained `dotnet publish` output. All commands and
+their verification status are in [`packaging/README.md`](packaging/README.md).
+
+```bash
+dotnet publish src/RimPulse.App -c Release -r linux-x64 --self-contained true \
+    -o artifacts/publish/linux-x64
+
+bash packaging/linux/build-deb.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0
+bash packaging/linux/build-appimage.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0 \
+    --appimagetool /path/to/appimagetool-x86_64.AppImage --extract-and-run
+```
+
+`v*` tags run the release workflow, which also builds a portable Windows ZIP and creates a **draft**
+release. `packaging/linux/verify.sh` smoke-tests the scripts, icons, `.deb` control fields and AppDir on
+every push without needing the SDK. Installing and launching a package on Linux Mint (X11/Wayland), the
+AppImage/FUSE path and the Windows builds are **not verified**; the repository has no `LICENSE` file yet,
+so packages must not be redistributed until a license is chosen. Packaging does not add features: the
+testing-environment and live-reload work from milestones 5–6 is still absent.
 
 ## Inspecting a mod project
 

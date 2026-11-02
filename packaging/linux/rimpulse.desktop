@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=RimPulse
+GenericName=RimWorld Mod Development Environment
+Comment=Build, reload and test RimWorld mods against a real installation
+Exec=rimpulse
+Icon=rimpulse
+Terminal=false
+Categories=Development;Utility;
+Keywords=RimWorld;mod;development;build;
+StartupWMClass=RimPulse

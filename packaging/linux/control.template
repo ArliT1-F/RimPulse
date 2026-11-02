@@ -1,0 +1,14 @@
+Package: rimpulse
+Version: @VERSION@
+Section: devel
+Priority: optional
+Architecture: @ARCH@
+Depends: @DEPENDS@
+Installed-Size: @INSTALLED_SIZE@
+Maintainer: RimPulse contributors <rimpulse@users.noreply.github.com>
+Homepage: https://github.com/ArliT1-F/RimPulse
+Description: RimWorld mod development environment
+ Build. Reload. Test. Repeat. RimPulse manages RimWorld installations,
+ compiles mod projects against the selected game's real assemblies and
+ launches a managed development session. It is a companion tool, not an
+ IDE or a game, and still requires a RimWorld 1.6 or 1.7 installation.
