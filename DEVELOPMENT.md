@@ -152,16 +152,17 @@ Honest accounting of how the current code has been verified. Update this section
 
 | Area | Status | How it was verified |
 | --- | --- | --- |
-| C# syntax of all sources | Verified | `dotnet build` passes in CI on every push |
-| XAML / MSBuild / solution files | Verified | The app, including the project list and build panel AXAML, compiles in CI (compiled bindings turn binding typos into build errors) |
-| `dotnet build` of the solution | Verified | GitHub Actions, Release configuration |
-| `dotnet test` of the suite | Verified | GitHub Actions, Release configuration; includes the `LoadFolders`, build-input, test-project detection, reference-resolution, Roslyn compiler and assembly-inspection tests |
+| C# syntax of all sources | New changes not yet verified | Run `dotnet build` in CI or with the .NET 10 SDK |
+| XAML / MSBuild / solution files | New changes not yet verified | Compile the app with compiled bindings enabled |
+| `dotnet build` of the solution | New changes not yet verified | GitHub Actions, Release configuration |
+| `dotnet test` of the suite | New changes not yet verified | GitHub Actions, Release configuration; includes direct process-launch tests using synthetic executables |
 | Credits catalog completeness | Verified | Encoded as tests (`CreditsCatalogTests`) and re-checked on every push |
 | Opening the desktop window | Verified for the previous milestone | Run on Linux with a real desktop session; the new project list and build panel need the same treatment |
 | Building a mod against a real installation | **Partially verified** | One real 1.6.4871 (`rev598`) run compiled the mod's own assembly against the installation (3 `CS0618` deprecation warnings), while its `*.Tests` project produced 712 errors: hand-written game stand-ins compiled next to the real assemblies. Test projects are now left out of a build and the duplicate-type cause is reported, both covered by tests in this change; that real-installation run has not been repeated yet |
 | Installation detection against a real RimWorld 1.6 install | **Not verified** | Requires a machine with the game installed |
 | Installation detection against a real RimWorld 1.7 install | **Not verified** | Requires a machine with the game installed |
-| Runtime behaviour (launching the game, IPC, reload) | Not implemented | Milestones 4–6 |
+| Direct Linux game launch and exit monitoring | Implemented, not yet verified against a real installation | Test both versions on a real Linux desktop; confirm executable names and Steam behavior |
+| Companion, IPC, managed mod configuration and reload | Not implemented | Milestones 4–6 |
 
 The first CI run found a real defect (the rotating log sink left no active log file after a rotation) and a
 wrong test expectation (`shortVersion` was asserted as `1.6.4851` instead of `1.6`). Both are fixed.
@@ -213,5 +214,6 @@ comment.
    MSBuild targets, item/string functions, wildcard imports and metadata-dependent item expressions are not.
 3. **Dependency resolution** — declared dependencies are displayed, not resolved against installed mods; the
    load-folder projection currently treats only the mod itself as active.
-4. **Runtime integration (milestone 4)** — companion mod, IPC and process management. Compilation is the last
-   prerequisite that is now in place.
+4. **Runtime integration (milestone 4)** — direct Linux process launch and exit monitoring are implemented.
+   Verify them with real installations; then implement version-specific companions, IPC, loaded-mod reporting
+   and managed development configuration. Process liveness is not game readiness.

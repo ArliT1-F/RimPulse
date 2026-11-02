@@ -216,6 +216,17 @@
         </Border>
       </Grid>
         </TabItem>
+        <TabItem Header="Runtime">
+          <Border Classes="panel" Margin="0,12,0,0">
+            <StackPanel Spacing="12">
+              <SelectableTextBlock Text="GAME PROCESS" Classes="section" />
+              <SelectableTextBlock Text="Launch the selected Linux installation normally. RimPulse does not configure mods or connect to the game yet." Classes="caption" TextWrapping="Wrap" />
+              <Button Content="Launch RimWorld" Classes="accent" HorizontalAlignment="Left" Command="{Binding LaunchGameCommand}" />
+              <SelectableTextBlock Text="{Binding RuntimeStatus}" Classes="body" TextWrapping="Wrap" />
+              <SelectableTextBlock Text="Close the game normally to save your progress. Closing RimPulse leaves the game running. Process status does not indicate that the game or any mod has finished loading." Classes="caption" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </TabItem>
         <TabItem Header="Mod project">
           <Border Classes="panel" Margin="0,12,0,0">
             <Grid RowDefinitions="Auto,*">
