@@ -103,10 +103,10 @@ rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/RimPulse"          # forget selected i
 rm -rf "${XDG_STATE_HOME:-$HOME/.local/state}/RimPulse/logs" # delete logs only; preserve profiles
 ```
 
-## 5. Publishing
+## 5. Publishing and packaging
 
-RimPulse packages (AppImage, `.deb`, Windows installer) are milestone 7. Publishing a runnable build by
-hand already works:
+Milestone 7 adds installable packages. Publishing a runnable build by hand still works, and is the input to
+every package:
 
 ```bash
 # framework-dependent: small, requires the .NET 10 runtime
@@ -114,12 +114,35 @@ dotnet publish src/RimPulse.App -c Release -o artifacts/linux-framework-dependen
 
 # self-contained: includes the runtime, runs on machines without .NET installed
 dotnet publish src/RimPulse.App -c Release -r linux-x64 --self-contained true \
-    -o artifacts/linux-x64
+    -o artifacts/publish/linux-x64
 
-./artifacts/linux-x64/RimPulse
+./artifacts/publish/linux-x64/RimPulse
 ```
 
-Keep published output out of Git (`artifacts/` is ignored).
+Package that publish directory (never `bin/` or `obj/`) with the scripts in [`packaging/`](packaging/README.md):
+
+```bash
+# SDK-free smoke test of the packaging scripts, icons, .deb control fields and AppDir layout
+python3 packaging/generate-icons.py --check
+bash packaging/linux/verify.sh
+
+# .deb and AppImage (the release workflow supplies a checksum-pinned appimagetool 1.9.1)
+bash packaging/linux/build-deb.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0 --arch amd64
+bash packaging/linux/build-appimage.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0 \
+    --arch amd64 --appimagetool /path/to/appimagetool-x86_64.AppImage --extract-and-run
+
+# Windows, on a Windows host (portable ZIP; installer.iss is an Inno Setup 6 script)
+pwsh packaging/windows/build-zip.ps1 -PublishDir artifacts/publish/win-x64 -Version 0.7.0
+```
+
+`v*` tags trigger `.github/workflows/release.yml`: self-contained `linux-x64` and `win-x64` publishes,
+a `.deb`, an AppImage and a Windows ZIP, plus a **draft** GitHub Release. Manual dispatch builds the same
+artifacts without a release. Keep published output out of Git (`artifacts/` is ignored).
+
+Before distributing anything, read the verification table and known blockers in
+[`packaging/README.md`](packaging/README.md): installation on Linux Mint/X11/Wayland and the Windows
+builds are not verified here, and the repository does not publish a `LICENSE` file yet, which is why
+`packaging/linux/copyright` says `UNKNOWN` and releases are drafts only.
 
 ## 6. Troubleshooting
 
@@ -163,6 +186,8 @@ diagnostics list is capped at 500 rows for the same reason; the log is the compl
 | Real companion/link/launch | **User-reported working** | The user reports linking and opening the game. Exact game version, authenticated IPC, main-menu readiness and mod initialization errors were not supplied. |
 | Reusable profiles / native quick test | **Automated file/argument checks; real-game check pending** | Tests cover persistence, preference preservation, DLC selection, dependency/order validation and the 1.6 `-quicktest` argument. Native quick test generates a normal world and 250×250 map, not a minimal sandbox. |
 | 1.7 | **Unverified** | Normal startup only; native quick test is disabled. Verify save-data handling, preference fields, companion APIs and log locations on a real Waylith installation. |
+| Packaging scripts and metadata (milestone 7) | **Passed locally and in CI** | `packaging/linux/verify.sh` checks script syntax, generated icon assets, desktop/control metadata, `.deb` structure and fields, both dependency sets, AppDir layout and the refusal cases, using a fake publish payload. No .NET SDK is needed for this step. |
+| Real `.deb` / AppImage / Windows packages | **Built by the release workflow on tags; installation not verified** | `release.yml` publishes real self-contained output and packages it with a checksum-pinned `appimagetool` 1.9.1. No desktop session was available to install and launch a package on Linux Mint (X11/Wayland); the Windows ZIP and Inno Setup script were prepared but not built or run. |
 
 ### Real-game profile checklist
 
@@ -213,11 +238,18 @@ and honour the license; GPL-3.0 and unlicensed code must not be copied in withou
 "test": { "runner": "Microsoft.Testing.Platform" }
 ```
 
-Failing runs attach the tail of the build/test output as a commit comment, because raw job logs are not
-reachable from every environment that needs to read them. Remove that step if your team does not want the
-comment.
+Failing runs attach the tail of the build/test/packaging output as a commit comment, because raw job logs
+are not reachable from every environment that needs to read them. Remove that step if your team does not
+want the comment. The same workflow also runs `packaging/linux/verify.sh`, an SDK-free packaging smoke
+test that does not need a publish or a display server.
 
-## 11. Next steps (milestone 3 and beyond)
+`.github/workflows/release.yml` builds the real `.deb`, AppImage and Windows ZIP from self-contained
+publishes on `v*` tags (or manual dispatch). It verifies the downloaded `appimagetool` against a pinned
+SHA-256 and creates a **draft** release, never a published one — the project has no license file yet.
+
+## 11. Next steps (milestones 3–6)
+
+Milestone 7 packaging is implemented; the remaining work is in the earlier, still-open milestones.
 
 1. **XML validation** — changed XML is checked for well-formedness; files under `Defs/` also get conservative
    root (`Defs`/`Patch`) and within-file duplicate `defName` checks (grouped by definition type). Cross-file
@@ -233,3 +265,8 @@ comment.
    the first implemented features. Minimal world/map generation, configurable world features, app-driven
    spawning/ticks and reset/cleanup still require version-specific game integration and a command channel.
    Neither process liveness nor a startup snapshot is main-menu/map readiness.
+5. **Packaging verification (milestone 7)** — scripts, icons, `.deb` metadata and AppDir layout are
+   implemented and smoke-tested. Still needed: choose and publish an upstream license, install and launch
+   the packages on Linux Mint 22.x under X11 and Wayland, check the AppImage/FUSE path and icon cache,
+   confirm the runtime dependency list, and compile/run the Windows ZIP and Inno Setup installer on a real
+   Windows host. Publish a draft release only after those checks.

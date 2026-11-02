@@ -1,0 +1,7 @@
+#!/bin/sh
+# AppImage entry point. AppRun is executed directly (not through usr/bin/rimpulse), so it resolves the
+# mounted AppDir itself. No system-wide install, no writes outside RimPulse's own XDG state directories.
+set -eu
+HERE="$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)"
+export PATH="$HERE/usr/bin:$PATH"
+exec "$HERE/usr/lib/rimpulse/RimPulse" "$@"

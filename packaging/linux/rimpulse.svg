@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="RimPulse">
+  <title>RimPulse</title>
+  <!-- Vector counterpart of the raster icon produced by packaging/generate-icons.py. -->
+  <defs>
+    <path id="pulse" d="M 48.6 128 H 89.6 L 110.1 89.6 L 135.7 171.5 L 158.7 102.4 L 179.2 128 H 207.4" />
+  </defs>
+  <rect x="1" y="1" width="254" height="254" rx="51" ry="51" fill="#0D1015" stroke="#232B36" stroke-width="3.5" />
+  <path d="M 102.2 46.4 A 89.6 89.6 0 1 1 168.9 61.1" fill="none" stroke="#5FE3A1" stroke-width="15.4" stroke-linecap="butt" />
+  <use href="#pulse" fill="none" stroke="#5FE3A1" stroke-width="16.4" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

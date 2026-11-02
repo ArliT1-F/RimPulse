@@ -1,0 +1,20 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: RimPulse
+Source: https://github.com/ArliT1-F/RimPulse
+
+Files: *
+Copyright: 2026 RimPulse contributors
+License: UNKNOWN
+ Comment: The upstream repository does not publish a LICENSE file at the time this
+  package metadata was written. Do not redistribute this .deb or upload it to a
+  package repository until the project chooses and publishes a license, then
+  replace this stanza. The in-app Credits panel lists the licenses of RimPulse's
+  own dependencies and of the third-party projects consulted during research.
+
+Files: usr/share/icons/hicolor/scalable/apps/rimpulse.svg
+       usr/share/icons/hicolor/256x256/apps/rimpulse.png
+       usr/share/applications/rimpulse.desktop
+Copyright: 2026 RimPulse contributors
+License: UNKNOWN
+ Comment: Generated for this repository by packaging/generate-icons.py and the
+  packaging sources; no third-party artwork is bundled.
