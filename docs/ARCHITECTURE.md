@@ -78,6 +78,7 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | Build | `GameReferenceResolver`, `GameReferenceSet` | Collects the installation's assemblies and, for the Waylith layout, the host runtime's framework assemblies. Reference assemblies only; nothing is loaded or executed |
 | Build | `ModCompiler`, `CompileRequest`, `CompilationResult`, `BuildDiagnostic` | In-process Roslyn compilation into memory; the assembly is written only after success |
 | Build | `ModBuilder`, `ModBuildPlan`, `ModBuildResult` | Compiles the units in order, feeding each output to the projects that reference it |
+| Build | `ModOutputDirectory`, `ModOutputDirectoryResolver` | Decides where the DLLs go: the version folder's `Assemblies` folder when the mod has one for the selected installation's version (`1.6/Assemblies`), else the mod root's |
 | Build | `AssemblyInspector`, `AssemblyInspection`, `AssemblyTypeInfo` | Reads a produced assembly's name, version, references and types with `System.Reflection.Metadata`; the assembly is never loaded into RimPulse, so inspecting a mod cannot run its code |
 | App | `MainWindowViewModel` | Installation list, selection, custom path entry, project list, inspection, monitoring, build, activity log mirror, status text |
 | App | `ProjectRow`, `BuildDiagnosticRow` | Presentation projections of the project list and build output |
@@ -162,6 +163,7 @@ library (the format subset needed is tiny).
 | D13 | Mods are compiled **in-process with Roslyn**, not by invoking `dotnet build` | A 1.6 mod targets `net472`, which cannot be built on Linux with the .NET SDK, and invoking MSBuild would couple RimPulse to whatever toolchain the author has installed and return unstructured output |
 | D14 | The compiler **emits to memory first** | A failed build must never leave a partially written DLL in `Assemblies/` for the game to load |
 | D15 | Reference assemblies for the Waylith layout come from **the host runtime** (`TRUSTED_PLATFORM_ASSEMBLIES`) | The 1.7 installation ships the game's assemblies, not the whole framework, and RimPulse has no other honest source. Documented as an assumption to re-check against a real 1.7 installation |
+| D17 | Build output follows the mod's **version folder** | RimWorld treats a folder named after the running version (`1.6`) as the mod root for that version, so a DLL written to the top-level `Assemblies` folder next to it is not the assembly the game loads. Writing to `1.6/Assemblies` keeps the build where the game looks, while a mod without version folders keeps the single top-level folder |
 
 ## 8a. Credits and attribution
 

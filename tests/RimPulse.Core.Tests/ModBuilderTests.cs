@@ -1,4 +1,5 @@
 using RimPulse.Core.Build;
+using RimPulse.Core.Game;
 using RimPulse.Core.Tests.TestSupport;
 using Xunit;
 
@@ -71,6 +72,30 @@ public sealed class ModBuilderTests
         var assembly = Assert.Single(result.OutputPaths);
         Assert.Equal(temp.Combine("Assemblies", "TestMod.dll"), assembly);
         Assert.True(File.Exists(assembly));
+    }
+
+    [Fact]
+    public void Build_WritesTheAssemblyIntoTheVersionedAssembliesFolderWhenTheModHasOne()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile("Source/TestMod/TestMod.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><AssemblyName>TestMod</AssemblyName></PropertyGroup>
+            </Project>
+            """);
+        temp.CreateFile("Source/TestMod/Mod.cs", "namespace TestMod; public static class Mod { public const int Version = 1; }");
+
+        // A mod that ships a version folder is loaded from it, so the DLL has to be written inside it too.
+        temp.CreateDirectory("1.6");
+        var output = ModOutputDirectoryResolver.Resolve(temp.Root, new GameVersion(1, 6));
+
+        var result = Build(temp, output.Path);
+
+        Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Problems));
+        var assembly = Assert.Single(result.OutputPaths);
+        Assert.Equal(temp.Combine("1.6", "Assemblies", "TestMod.dll"), assembly);
+        Assert.True(File.Exists(assembly));
+        Assert.False(File.Exists(temp.Combine("Assemblies", "TestMod.dll")));
     }
 
     [Fact]
