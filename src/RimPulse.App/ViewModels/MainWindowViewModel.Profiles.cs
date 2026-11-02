@@ -32,7 +32,7 @@ public sealed partial class MainWindowViewModel
     public AsyncRelayCommand AddSelectedProjectToProfileCommand { get; private set; } = null!;
     public AsyncRelayCommand SaveSettingsCommand { get; private set; } = null!;
     public bool CanEditProfile => !_runtimeRunning && !_runtimeSetupBusy && !IsProfileBusy && SelectedInstallation?.IsReady == true;
-    public bool IsProfileBusy { get => _profileBusy; private set { if (SetProperty(ref _profileBusy, value)) { OnPropertyChanged(nameof(CanEditProfile)); RefreshProfileCommands(); } } }
+    public bool IsProfileBusy { get => _profileBusy; private set { if (SetProperty(ref _profileBusy, value)) { OnPropertyChanged(nameof(CanEditProfile)); RefreshProfileCommands(); RefreshRuntimeCommands(); } } }
     public bool IsProfileDirty { get => _profileDirty; set { if (SetProperty(ref _profileDirty, value)) OnPropertyChanged(nameof(ProfileDraftLabel)); } }
     public string ProfileDraftLabel => IsProfileDirty ? "Unsaved changes — Save profile, or Revert." : "Saved profiles are reused; your normal game configuration is untouched.";
     public string ProfileVersionNote => Profile.CanUseNativeQuickStart
@@ -265,6 +265,46 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception ex) { Profile.Status = "Could not add project: " + ex.Message; _log.Warning("Profiles", Profile.Status); }
         finally { if (!_disposed) IsProfileBusy = false; }
+    }
+
+    /// <summary>Imports only into the currently selected saved profile; never overwrites an existing file.</summary>
+    public async Task ImportProfileContentAsync(string sourcePath, string expectedProfileId)
+    {
+        if (!CanEditProfile || SelectedSavedProfile is null || SelectedSavedProfile.Id != expectedProfileId || Profile.Id != expectedProfileId)
+        {
+            Profile.Status = "Select a saved profile and close the game before importing. If you switched profiles, choose the file again.";
+            return;
+        }
+        if (IsProfileDirty)
+        {
+            Profile.Status = "Save profile or Revert before importing a save or scenario.";
+            return;
+        }
+        var saved = _configuration.DevelopmentProfiles.FirstOrDefault(profile => profile.Id == expectedProfileId);
+        if (saved is null) { Profile.Status = "Save the profile before importing."; return; }
+        IsProfileBusy = true;
+        Profile.Status = "Copying the selected file into the development profile…";
+        try
+        {
+            var destination = await Task.Run(() => ProfileContentImporter.Import(_paths, saved, sourcePath));
+            if (_disposed) return;
+            _log.Info("Profiles", "Imported profile content to " + destination);
+            if (Profile.Id == expectedProfileId)
+                Profile.Status = $"Copied to {destination}. Load it in RimWorld; compatibility and mod requirements are not checked. Disable native quick test to use the main menu.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException)
+        {
+            var message = "Import failed (existing files are never overwritten): " + ex.Message;
+            if (!_disposed && Profile.Id == expectedProfileId) Profile.Status = message;
+            _log.Warning("Profiles", message);
+        }
+        finally { if (!_disposed) IsProfileBusy = false; }
+    }
+
+    public void ReportProfileContentPickerError(Exception exception)
+    {
+        Profile.Status = "Could not select a save or scenario: " + exception.Message;
+        _log.Warning("Profiles", Profile.Status);
     }
 
     private async Task SaveSettingsAsync()

@@ -152,9 +152,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             HandleCommandException);
 
         LaunchGameCommand = new AsyncRelayCommand(() => LaunchGameAsync(false),
-            () => !_runtimeRunning && !_runtimeSetupBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
+            () => !_runtimeRunning && !_runtimeSetupBusy && !IsProfileBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
         LaunchDevelopmentCommand = new AsyncRelayCommand(() => LaunchGameAsync(true),
-            () => !_runtimeRunning && !_runtimeSetupBusy && !IsProjectBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
+            () => !_runtimeRunning && !_runtimeSetupBusy && !IsProfileBusy && !IsProjectBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
         InstallCompanionCommand = new AsyncRelayCommand(InstallCompanionAsync,
             () => !_runtimeRunning && !_runtimeSetupBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
         LinkDevelopmentProjectCommand = new AsyncRelayCommand(LinkDevelopmentProjectAsync,
@@ -265,7 +265,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         var installation = SelectedInstallation?.Model;
         var projectPath = SelectedProject?.Path; // This launch keeps its own selection even if the UI changes later.
-        if (installation is null || _runtimeRunning || _runtimeSetupBusy) return;
+        if (installation is null || _runtimeRunning || _runtimeSetupBusy || IsProfileBusy) return;
         _runtimeRunning = true;
         var sequence = ++_runtimeSequence;
         RefreshRuntimeCommands();

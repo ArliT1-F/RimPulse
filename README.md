@@ -51,7 +51,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 | 2 — Project management | Mod project directories, `About.xml` parsing, structure detection, dependency detection, file monitoring | **In progress** — multiple-project inspection and monitoring implemented; installed-mod dependency closure and load-order planning now available in Profiles |
 | 3 — Build & validation | `.csproj` detection, game reference resolution, Roslyn compilation, XML validation, assembly inspection | **In progress** — changed-file XML syntax checks plus conservative per-file `Defs` structure checks |
 | 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | **In progress** — opt-in companions, authenticated startup IPC and reusable GUI-configured profiles implemented; companion linking/game launch reported working on a user machine, exact version and IPC readiness unconfirmed |
-| 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | **Started** — persistent profile preferences, native Developer Mode and explicit 1.6 quick test; minimal maps, app-driven spawning/ticks and reset remain |
+| 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | **Started** — persistent profiles, native Developer Mode, explicit 1.6 quick test and import of existing saves/scenarios; sandbox generation, faction/incident controls, app-driven spawning/ticks and reset remain |
 | 6 — Live reload | Asset reload, definition reload, assembly reload research per version, restart fallback | Not started |
 | 7 — Packaging | AppImage, `.deb`, desktop entry, Windows packaging | **Implemented (packaging)** — `.deb`, AppImage, portable Windows ZIP and installer source built from `dotnet publish`; installation on a real desktop and the license decision remain unverified |
 
@@ -77,7 +77,7 @@ This repository is being built incrementally, one milestone at a time. Features 
   installation's version. Folders that a condition excludes are listed with that condition, never dropped
   silently. The projection uses the edited profile's configured mod list when its installation/version match,
   and labels that as a configuration projection rather than runtime confirmation.
-- Monitors the selected directory, batches and classifies changes, refreshes metadata when `About.xml` changes, and checks changed XML for well-formedness. Files under `Defs/` also get conservative checks for a `<Defs>` or `<Patch>` root and duplicate explicit `defName` values within the same definition type in that file; this is not game-schema validation and does not resolve cross-file or vanilla-game inheritance.
+- Monitors the selected directory, batches and classifies changes, refreshes metadata when `About.xml` changes, and checks changed XML for well-formedness. Files under `Defs/` also get conservative checks for a `<Defs>` or `<Patch>` root and duplicate explicit `defName` values within the same definition type in that file. A definition with matching `Name` and `ParentName` gets a possible-cycle warning, not a definitive error. This is not game-schema validation and does not resolve cross-file or vanilla-game inheritance.
 - Finds the mod's `.csproj` projects, resolves the game assemblies of the selected installation and **compiles
   the mod in-process with Roslyn**, reporting every diagnostic with file, line and column. A build writes the
   assembly into the mod's `Assemblies` folder — or `1.6/Assemblies` when the mod keeps a folder for the selected
@@ -301,6 +301,18 @@ manual JSON editing is not part of the workflow.
 
 Profile data lives at `<RimPulse state>/development-profiles/<id>/data`. Older `runtime-sessions` directories
 are retained, not migrated or deleted. Removing a profile from configuration does not erase its saves.
+
+### Reuse an existing world or scenario
+
+With the game closed, save the profile and choose **Import save or scenario…** in Profiles. Select a local
+`.rws` save or `.rsc` scenario created in RimWorld. RimPulse copies it, without overwriting, into that profile's
+`Saves` or `Scenarios` folder. Disable native quick test, launch the profile, and select the save or scenario
+in the game's menus. Create or edit the scenario and its incident rules using RimWorld's own UI. A scenario
+is used when creating a new game; importing it does not change an existing save. Import copies files only:
+it does not validate their content, version, DLC or mod compatibility, or guarantee that the game will load
+them. Back up the originals and match the profile's mods and game version. Profile save-data handling,
+particularly on 1.7, still needs real-game verification. RimPulse cannot yet generate custom worlds or apply
+faction, caravan or incident controls itself.
 
 ### Cleanup
 

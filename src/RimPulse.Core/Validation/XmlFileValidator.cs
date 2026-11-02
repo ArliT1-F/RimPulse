@@ -45,11 +45,13 @@ public static class XmlFileValidator
                 return new(XmlCheckStatus.NotChecked, "File changed during the check; check again.");
 
             var structuralIssue = CheckDefsStructure(relative, document);
-            return structuralIssue is null
-                ? new(XmlCheckStatus.WellFormed, IsUnderDefs(relative)
-                    ? "Well-formed XML; basic Defs structure checked (game semantics not checked)."
-                    : "Well-formed XML (syntax only; game semantics not checked).")
-                : new(XmlCheckStatus.Failed, structuralIssue);
+            if (structuralIssue is not null) return new(XmlCheckStatus.Failed, structuralIssue);
+
+            var inheritanceWarning = CheckDirectSelfParent(relative, document);
+            return new(XmlCheckStatus.WellFormed, IsUnderDefs(relative)
+                ? "Well-formed XML; basic Defs structure checked (game semantics not checked)." +
+                    (inheritanceWarning is null ? "" : " " + inheritanceWarning)
+                : "Well-formed XML (syntax only; game semantics not checked).");
         }
         catch (XmlException ex)
         {
@@ -91,6 +93,21 @@ public static class XmlFileValidator
                 if (!seen.Add(names[0]))
                     return AtLine(definition, $"Duplicate defName '{names[0]}' in <{definitionGroup.Key}> definitions in this file.");
             }
+        }
+        return null;
+    }
+
+    // Name resolution can depend on other files, game definitions and patches. Flag this pattern as a
+    // possible cycle, never as a definite error; the game may resolve the parent to a different node.
+    private static string? CheckDirectSelfParent(string relativePath, XDocument document)
+    {
+        if (!IsUnderDefs(relativePath) || document.Root?.Name != "Defs") return null;
+        foreach (var definition in document.Root.Elements())
+        {
+            var name = ((string?)definition.Attribute("Name"))?.Trim();
+            var parent = ((string?)definition.Attribute("ParentName"))?.Trim();
+            if (!string.IsNullOrEmpty(name) && string.Equals(name, parent, StringComparison.Ordinal))
+                return AtLine(definition, $"Possible inheritance cycle: Name and ParentName are both '{name}'; parent resolution was not checked");
         }
         return null;
     }

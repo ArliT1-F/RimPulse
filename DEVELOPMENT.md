@@ -194,7 +194,7 @@ diagnostics list is capped at 500 rows for the same reason; the log is the compl
 | 1.7 | **Unverified** | Normal startup only; native quick test is disabled. Verify save-data handling, preference fields, companion APIs and log locations on a real Waylith installation. |
 | Packaging scripts and metadata (milestone 7) | **Passed locally and in CI** | `packaging/linux/verify.sh` checks script syntax, generated icon assets, desktop/control metadata, the shared `appimagetool` pin and CI wiring, `.deb` structure/fields and install hint, both dependency sets, AppDir layout, the stubbed `appimagetool` invocation, auto-detection, placeholder rejection and the refusal cases, using a fake publish payload. No .NET SDK is needed for this step. |
 | Real `.deb` from published output | **User-reported build success; installation not verified** | A user ran the self-contained `linux-x64` publish and `build-deb.sh --version 0.7.0 --arch amd64` successfully on their machine. Installing or launching the package was not reported. |
-| Real AppImage / Windows packages | **Built by the release workflow on tags; not run on a desktop** | `release.yml` publishes real self-contained output and packages it with a checksum-pinned `appimagetool` 1.9.1. No desktop session was available to install/launch a package on Linux Mint (X11/Wayland); the Windows ZIP and Inno Setup script were prepared but not built or run. |
+| Real AppImage / Windows packages | **AppImage build user-reported; desktop launch and Windows unverified** | A user built a real Linux AppImage with checksum-pinned `appimagetool` 1.9.1. Installation or launch on Linux Mint (X11/Wayland) was not reported; the Windows ZIP and Inno Setup script were prepared but not built or run. |
 
 ### Real-game profile checklist
 
@@ -259,7 +259,8 @@ SHA-256 and creates a **draft** release, never a published one — the project h
 Milestone 7 packaging is implemented; the remaining work is in the earlier, still-open milestones.
 
 1. **XML validation** — changed XML is checked for well-formedness; files under `Defs/` also get conservative
-   root (`Defs`/`Patch`) and within-file duplicate `defName` checks (grouped by definition type). Cross-file
+   root (`Defs`/`Patch`) and within-file duplicate `defName` checks (grouped by definition type). A direct
+   `Name`/`ParentName` match produces a possible-cycle warning, not a resolved inheritance diagnosis. Cross-file
    uniqueness, `Abstract`/`ParentName` resolution against the mod and game, and RimWorld schema validation remain.
 2. **Build fidelity** — the MSBuild subset RimPulse understands is documented in the README. Properties,
    `Directory.Build.props`, imported props files, conditions, SDK default sources and common `Compile` globs
@@ -269,9 +270,11 @@ Milestone 7 packaging is implemented; the remaining work is in the earlier, stil
    and load-order validation are implemented. Verify them on real games; downloads, live mod-list updates and
    full game-schema validation remain outside this increment.
 4. **Testing environment (milestone 5)** — native Developer Mode preferences and explicit 1.6 quick test are
-   the first implemented features. Minimal world/map generation, configurable world features, app-driven
-   spawning/ticks and reset/cleanup still require version-specific game integration and a command channel.
-   Neither process liveness nor a startup snapshot is main-menu/map readiness.
+   implemented. Existing `.rws` saves and `.rsc` scenarios can be copied into a saved profile without
+   overwriting; the game must load them, and compatibility is not checked. Verify this flow on real 1.6/1.7.
+   Minimal world/map generation, configurable faction, caravan and incident rules, app-driven spawning/ticks
+   and reset/cleanup still require version-specific game integration and a command channel. Neither process
+   liveness nor a startup snapshot is main-menu/map readiness.
 5. **Packaging verification (milestone 7)** — scripts, icons, `.deb` metadata and AppDir layout are
    implemented and smoke-tested. Still needed: choose and publish an upstream license, install and launch
    the packages on Linux Mint 22.x under X11 and Wayland, check the AppImage/FUSE path and icon cache,

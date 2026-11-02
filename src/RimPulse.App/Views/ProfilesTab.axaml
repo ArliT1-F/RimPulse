@@ -103,7 +103,15 @@
           <SelectableTextBlock Text="Settings are written only to this profile. Close the game before editing or relaunching. Unrelated game preferences are preserved. God mode, spawning and tick controls remain in the game's native developer tools; RimPulse does not yet automate them." Classes="caption" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
-      <SelectableTextBlock Text="Next milestone work: configurable minimal world/map generation, runtime tick controls and confirmed reloads. None are simulated or reported as implemented here." Classes="caption" TextWrapping="Wrap" Margin="2,0,2,8" />
+      <Border Classes="panel" IsEnabled="{Binding CanEditProfile}">
+        <StackPanel Spacing="8">
+          <SelectableTextBlock Text="EXISTING TEST WORLDS &amp; SCENARIOS" Classes="section" />
+          <SelectableTextBlock Text="Copy an existing RimWorld save (.rws) or scenario (.rsc) into a saved development profile. Close the game first and keep a backup. Existing profile files are never overwritten." Classes="caption" TextWrapping="Wrap" />
+          <Button Content="Import save or scenario…" Classes="quiet" HorizontalAlignment="Left" Click="OnImportProfileContent" />
+          <SelectableTextBlock Text="Choose the imported file in RimWorld's load-game or scenario menu. Disable native quick test to use the main menu. Match the game version and mods yourself; RimPulse does not verify compatibility. The isolated save-data path needs real-game verification on 1.7." Classes="caption" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <SelectableTextBlock Text="Configurable sandbox generation, direct faction/caravan/incident controls, runtime tick controls and confirmed reloads are not implemented yet." Classes="caption" TextWrapping="Wrap" Margin="2,0,2,8" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

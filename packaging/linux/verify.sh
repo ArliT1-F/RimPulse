@@ -169,6 +169,28 @@ for expected in '--appimage-extract-and-run' '--no-appstream' 'RimPulse-0.0.0-te
 done
 pass "appimagetool invocation and resulting image are correct (stub tool)"
 
+# The printed run commands must execute the correct absolute path, even when it contains shell
+# metacharacters. Replace the stub output with a tiny executable so both displayed hints can be run.
+quoted_output="$work/out space ' \$(touch INJECTED)"
+appimage_output="$(FAKE_LOG="$fake_log" "$PACKAGING_LINUX_DIR/build-appimage.sh" --publish-dir "$publish" \
+    --version 0.0.0-test --arch amd64 --output "$quoted_output" \
+    --appimagetool "$fake_tool" --extract-and-run 2>&1)" || fail "AppImage build with special characters failed"
+quoted_image="$quoted_output/RimPulse-0.0.0-test-x86_64.AppImage"
+cat >"$quoted_image" <<'EOF'
+#!/usr/bin/env bash
+printf 'extract=%s\n' "${APPIMAGE_EXTRACT_AND_RUN:-0}"
+EOF
+chmod 755 -- "$quoted_image"
+run_hint="$(printf '%s\n' "$appimage_output" | sed -n 's/^  Run it with: //p')"
+fuse_hint="$(printf '%s\n' "$appimage_output" | sed -n 's/^  Without FUSE: //p')"
+[[ -n "$run_hint" && -n "$fuse_hint" ]] || fail "AppImage run hints are missing"
+[[ "$(cd "$work" && unset APPIMAGE_EXTRACT_AND_RUN && bash -c "$run_hint")" == 'extract=0' ]] ||
+    fail "AppImage run hint is not executable"
+[[ "$(cd "$work" && bash -c "$fuse_hint")" == 'extract=1' ]] ||
+    fail "AppImage no-FUSE run hint is not executable"
+[[ ! -e "$work/INJECTED" ]] || fail "AppImage run hint evaluated path content as shell code"
+pass "AppImage run hints work with absolute paths and shell metacharacters"
+
 # 5c. A tool in fetch-appimagetool.sh's default location is auto-detected, so the common flow needs no
 # --appimagetool argument. Skip this assertion on a host that already has appimagetool on PATH (that
 # takes precedence by design).
