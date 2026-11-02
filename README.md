@@ -82,6 +82,12 @@ This repository is being built incrementally, one milestone at a time. Features 
   assembly into the mod's `Assemblies` folder only when you press **Build** and only after compilation
   succeeded. The produced assembly is then read back from its metadata (name, version, references, types), so
   the build panel shows what the game would actually load.
+- Leaves out a project that is a test harness rather than part of the mod — it declares `IsTestProject`,
+  references xunit/NUnit/MSTest, or is named `*.Tests` — and says so in one line. The game never loads such an
+  assembly, and those projects usually compile their own stand-ins for the game's API, which cannot be
+  compiled side by side with the installation's real assemblies (that combination produces hundreds of
+  `CS0436`/`CS0104`/`CS0121` errors). A build that fails that way anyway gets one explanatory line next to the
+  diagnostics.
 - Resolves `<PackageReference>` items from packages that are **already restored** in the NuGet global packages
   folder, so a Harmony dependency declared as a package compiles; a package that is missing, uses a floating
   version or is not compatible with the project's target framework is reported as one clear line instead of
@@ -294,7 +300,7 @@ Honesty matters more than a green checkmark. Current state, on Ubuntu with the .
 | Check | Result |
 | --- | --- |
 | `dotnet build RimPulse.slnx -c Release` | **Passes in CI** (GitHub Actions, Ubuntu, .NET 10) with warnings as the compiler sees them; no warnings in the last run |
-| `dotnet test RimPulse.slnx -c Release` | **Passes in CI** — 177 tests, including the project, `LoadFolders`, build-input, reference-resolution, Roslyn compiler and assembly-inspection tests |
+| `dotnet test RimPulse.slnx -c Release` | **Passes in CI** — includes the project, `LoadFolders`, build-input, test-project detection, reference-resolution, Roslyn compiler and assembly-inspection tests |
 | The desktop window on a real desktop | **Verified locally for the previous milestone** — the app started, detected an installation and inspected a mod directory on Linux. The new project list and build panel have not been run on a desktop yet |
 | Detection against a real RimWorld installation | **Partially verified** — a scan on the author's machine reported one installation; whether its version was confirmed was not recorded |
 | Building a real mod against a real installation | **Not verified** — the compiler is exercised in CI against the test runtime's assemblies, not against game assemblies from a real install |
