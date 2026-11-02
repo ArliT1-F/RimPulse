@@ -126,10 +126,12 @@ Package that publish directory (never `bin/` or `obj/`) with the scripts in [`pa
 python3 packaging/generate-icons.py --check
 bash packaging/linux/verify.sh
 
-# .deb and AppImage (the release workflow supplies a checksum-pinned appimagetool 1.9.1)
+# .deb and AppImage. fetch-appimagetool.sh downloads the pinned, checksum-verified appimagetool 1.9.1;
+# build-appimage.sh finds it in artifacts/tools automatically (or pass --appimagetool /real/path).
 bash packaging/linux/build-deb.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0 --arch amd64
+bash packaging/linux/fetch-appimagetool.sh
 bash packaging/linux/build-appimage.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0 \
-    --arch amd64 --appimagetool /path/to/appimagetool-x86_64.AppImage --extract-and-run
+    --arch amd64 --extract-and-run
 
 # Windows, on a Windows host (portable ZIP; installer.iss is an Inno Setup 6 script)
 pwsh packaging/windows/build-zip.ps1 -PublishDir artifacts/publish/win-x64 -Version 0.7.0
@@ -162,7 +164,11 @@ builds are not verified here, and the repository does not publish a `LICENSE` fi
 | Game running, companion waiting | Companion disabled, game not yet at snapshot phase, failed game-side compile/load, incompatible version/PID, or isolated mod config ignored | Check that the mod is enabled in the profile actually in use, inspect the game log and app log, and verify real-game compatibility. A process alone is not readiness. |
 | Selected project absent or mismatched | The package ID is missing/inactive or another directory for the same ID was loaded | Inspect the startup list and the actual game-reported root path. Explicitly link the selected project if needed, avoid duplicate copies and restart. |
 | Development game misses DLC or dependencies | The profile selection is incomplete or a mod was removed after catalog refresh | Refresh the catalog, enable DLC/mods and save. Missing dependencies and hard-order cycles block save/launch. Only downloaded Workshop mods are available. |
-| Unexpected behaviour | — | Read the activity log first, then the log file; both record detection, configuration and UI errors |
+| `sudo apt install .//home/.../rimpulse.deb` fails | Older packaging output prefixed an absolute path with `./` in the install hint | The hint now prints the absolute path directly; run `sudo apt install /abs/path/rimpulse_0.7.0_amd64.deb` or `cd artifacts/packages && sudo apt install ./rimpulse_0.7.0_amd64.deb` |
+| `appimagetool '/path/to/…' is not executable` | A literal example path from older docs was pasted as if it were a real file | Run `bash packaging/linux/fetch-appimagetool.sh` for a verified copy; then omit `--appimagetool`, or pass the real path the script prints. `build-appimage.sh` rejects placeholder paths explicitly |
+| `fetch-appimagetool.sh` cannot download the tool | GitHub redirects release assets to `release-assets.githubusercontent.com`, which a proxy or firewall may block | Allow that host, or download `appimagetool-x86_64.AppImage` from the 1.9.1 release page manually, verify its SHA-256 against `packaging/linux/appimagetool.env` and pass `--appimagetool /real/path` |
+| AppImage does not start (`dlopen(): error loading libfuse.so.2`) | The host lacks FUSE 2 | Build with `--extract-and-run`, and run with `APPIMAGE_EXTRACT_AND_RUN=1 ./RimPulse-0.7.0-x86_64.AppImage`, or install `libfuse2` |
+| `Unexpected behaviour` | — | Read the activity log first, then the log file; both record detection, configuration and UI errors |
 
 Logs are the first place to look. Every startup writes the platform, configuration path and log path:
 
@@ -186,8 +192,9 @@ diagnostics list is capped at 500 rows for the same reason; the log is the compl
 | Real companion/link/launch | **User-reported working** | The user reports linking and opening the game. Exact game version, authenticated IPC, main-menu readiness and mod initialization errors were not supplied. |
 | Reusable profiles / native quick test | **Automated file/argument checks; real-game check pending** | Tests cover persistence, preference preservation, DLC selection, dependency/order validation and the 1.6 `-quicktest` argument. Native quick test generates a normal world and 250×250 map, not a minimal sandbox. |
 | 1.7 | **Unverified** | Normal startup only; native quick test is disabled. Verify save-data handling, preference fields, companion APIs and log locations on a real Waylith installation. |
-| Packaging scripts and metadata (milestone 7) | **Passed locally and in CI** | `packaging/linux/verify.sh` checks script syntax, generated icon assets, desktop/control metadata, `.deb` structure and fields, both dependency sets, AppDir layout, the stubbed `appimagetool` invocation and the refusal cases, using a fake publish payload. No .NET SDK is needed for this step. |
-| Real `.deb` / AppImage / Windows packages | **Built by the release workflow on tags; installation not verified** | `release.yml` publishes real self-contained output and packages it with a checksum-pinned `appimagetool` 1.9.1. No desktop session was available to install and launch a package on Linux Mint (X11/Wayland); the Windows ZIP and Inno Setup script were prepared but not built or run. |
+| Packaging scripts and metadata (milestone 7) | **Passed locally and in CI** | `packaging/linux/verify.sh` checks script syntax, generated icon assets, desktop/control metadata, the shared `appimagetool` pin and CI wiring, `.deb` structure/fields and install hint, both dependency sets, AppDir layout, the stubbed `appimagetool` invocation, auto-detection, placeholder rejection and the refusal cases, using a fake publish payload. No .NET SDK is needed for this step. |
+| Real `.deb` from published output | **User-reported build success; installation not verified** | A user ran the self-contained `linux-x64` publish and `build-deb.sh --version 0.7.0 --arch amd64` successfully on their machine. Installing or launching the package was not reported. |
+| Real AppImage / Windows packages | **Built by the release workflow on tags; not run on a desktop** | `release.yml` publishes real self-contained output and packages it with a checksum-pinned `appimagetool` 1.9.1. No desktop session was available to install/launch a package on Linux Mint (X11/Wayland); the Windows ZIP and Inno Setup script were prepared but not built or run. |
 
 ### Real-game profile checklist
 

@@ -63,4 +63,6 @@ done
 [[ "$(dpkg-deb --field "$package" Version)" == "$VERSION" ]] || die "Built package has the wrong Version field."
 
 info "Wrote $package"
-info "Install locally with: sudo apt install ./$package"
+# $package is an absolute path. Prefixing it with './' produced the unusable hint
+# "sudo apt install .//home/.../rimpulse.deb"; apt accepts the absolute path as-is.
+info "Install locally with: sudo apt install \"$package\""
