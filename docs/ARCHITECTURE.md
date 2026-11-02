@@ -201,12 +201,14 @@ Rules enforced by `CreditsCatalogTests`:
   satisfy this);
 - entries using GitHub search links must also link the specific repository they surface.
 
-Attribution policy (also shown in the app):
+Third-party code policy (also shown in the app):
 
-> Every project RimPulse references or depends on is listed here with its creator and license. RimPulse adapts
-> no RimWorld tooling code in this implementation. If code, data or assets from any referenced project are adapted, the
-> entry must be marked as adapted, the original author credited, and the original license honoured. Copyleft
-> (GPL) and unlicensed projects must not be copied into RimPulse without an explicit licensing decision.
+> Every project RimPulse references or depends on is listed here with its creator and license. RimPulse
+> currently adapts no RimWorld tooling code. Code, data or assets may be reused when it is better suited than a
+> clean implementation and the actual license permits the intended distribution. Review source licenses and
+> notices, record the repository revision and adapted files, preserve required notices, satisfy license
+> obligations, assess compatibility with RimPulse's distribution, and identify adaptations in the in-app Credits.
+> Copyleft obligations must be met; do not copy from unlicensed sources without an explicit license grant.
 
 ## 8b. Packaging (milestone 7)
 

@@ -228,6 +228,22 @@ universal switch for all caravan movement, manually triggered incidents, or mod 
 generation are separate concerns. No game code was copied, and RimPulse does not yet create or apply these
 rules. The same behavior must not be assumed for 1.7 without verification.
 
+### Design rule: custom worlds and selective activity
+
+A future profile may configure world generation and unwanted activity, but these are not interchangeable
+switches. For example, excluding tribal factions from a newly generated world is a world-generation policy;
+disabling random caravan incidents is an incident policy; preventing a player from forming a caravan would
+change gameplay and could break mods. RimPulse must not present one broad “disable tribes/caravans” toggle
+as if it guarantees all three. Keep player-controlled and mod-triggered functionality available unless a
+separate, explicitly scoped policy is verified.
+
+Before exposing a control, verify per game version: the exact generation/incident hook, whether it applies to
+already-created worlds, whether scenario settings can be bypassed (including by direct/mod-triggered calls),
+and whether the minimum valid player faction/world setup still initializes. Mark unsupported controls
+unavailable rather than saving preferences the companion cannot enforce. World settings that affect
+creation must show a regenerate-world consequence; ordinary code reloads must not silently regenerate a
+persisted test world. Real-game verification is a release gate for each supported version.
+
 ## 4. Open questions to answer against a real installation
 
 Keep this list current; each item blocks or shapes a later milestone.
