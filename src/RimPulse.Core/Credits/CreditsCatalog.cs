@@ -12,11 +12,12 @@ public static class CreditsCatalog
 {
     public const string AttributionPolicy =
         "Every project RimPulse references or depends on is listed here together with its creator and license. " +
-        "RimPulse adapts no RimWorld tooling code in this implementation: those projects are listed because their work " +
-        "overlaps with RimPulse's milestones and was studied for reference. If code, data or assets from any of " +
-        "them are ever adapted, the entry must be marked as adapted, the original author credited here, and the " +
-        "original license honoured. Copyleft (GPL) and unlicensed projects must not be copied into RimPulse " +
-        "without an explicit licensing decision.";
+        "RimPulse currently adapts no RimWorld tooling code; these projects have been studied as references. " +
+        "Code, data or assets may be reused when it is better suited than a clean implementation and the actual " +
+        "license permits the intended distribution. Before inclusion, review the source license and notices, record " +
+        "the repository revision and adapted files, preserve required notices, satisfy license obligations, and " +
+        "assess compatibility with RimPulse's distribution. Update this entry to identify adaptations. Copyleft " +
+        "obligations must be met; do not copy from unlicensed sources without an explicit license grant.";
 
     /// <summary>Every referenced project and organisation, in milestone order.</summary>
     public static IReadOnlyList<CreditEntry> Entries { get; } =
@@ -61,7 +62,7 @@ public static class CreditsCatalog
             Url: "https://github.com/search?q=RimTest+Redux&type=repositories",
             Summary: "Community search that surfaces ilyvion/rimtest-redux: a lightweight automated testing framework for other RimWorld mods.",
             Relevance: "Reference for in-game automated checks, which RimPulse needs to confirm a reload actually succeeded rather than reporting success blindly.",
-            License: "Custom license (see repository)",
+            License: "Apache-2.0 OR MIT (dual-licensed; verify selected license terms)",
             RelatedUrl: "https://github.com/ilyvion/rimtest-redux",
             RelatedUrlLabel: "Open ilyvion/rimtest-redux"),
 

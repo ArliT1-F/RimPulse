@@ -702,6 +702,12 @@ When a feature is disabled, prevent its generation or underlying activity wherev
 
 If a particular feature cannot be safely disabled without breaking required game functionality, explain the limitation.
 
+World and activity controls must distinguish **generation** from **runtime activity**. A control that prevents a faction or settlement from being generated is not equivalent to suppressing activity from one that already exists. The UI must state which effect a setting has and whether changing it requires a new world. Never imply that hiding an icon disables the underlying behavior.
+
+Faction controls must be expressed in terms users can understand and test: faction presence/generation, settlement generation, and faction-specific behavior are separate options. “Disable tribes” must not silently remove every faction or the player faction; it should mean excluding tribal factions from generated worlds, with a separate runtime policy only if the game API supports it safely. Likewise, “disable caravans” must distinguish preventing random caravan incidents/visitors from disabling player-created caravan mechanics. Do not globally block caravan code or mod-initiated behavior as a side effect of a storyteller setting.
+
+For each world/activity option, record the supported game versions, the mechanism used, and known bypasses. If a version has no verified safe mechanism, show the option as unavailable rather than exposing a nonfunctional toggle. Verify settings against both vanilla and a test mod that exercises the relevant game system before marking them supported.
+
 F. Testing map persistence
 
 The testing map should remain persistent between supported development reloads.

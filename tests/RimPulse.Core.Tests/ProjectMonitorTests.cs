@@ -27,6 +27,27 @@ public sealed class ProjectMonitorTests
     }
 
     [Fact]
+    public async Task Monitor_IsolatesFailingSubscribersAndNotifiesOtherSubscribers()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateDirectory("Defs");
+        var notified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reported = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var monitor = new ProjectMonitor(temp.Root, TimeSpan.FromMilliseconds(100));
+        monitor.ChangesDetected += (_, _) => throw new InvalidOperationException("consumer failure");
+        monitor.ChangesDetected += (_, _) => notified.TrySetResult();
+        monitor.MonitoringError += (_, message) => reported.TrySetResult(message);
+        monitor.Start();
+
+        temp.CreateFile("Defs/Test.xml", "<Defs />");
+
+        await notified.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var message = await reported.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Assert.Contains("subscriber failed", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("consumer failure", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Monitor_RejectsMissingRootsAndInvalidDebounce()
     {
         using var temp = new TempDirectory();

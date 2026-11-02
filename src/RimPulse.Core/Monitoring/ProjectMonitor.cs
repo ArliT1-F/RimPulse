@@ -114,13 +114,34 @@ public sealed class ProjectMonitor : IDisposable
             _pending.Clear();
             _overflowReported = false;
         }
-        ChangesDetected?.Invoke(this, changes);
+        var handlers = ChangesDetected;
+        if (handlers is null) return;
+        foreach (EventHandler<IReadOnlyList<ProjectChange>> handler in handlers.GetInvocationList())
+        {
+            try { handler(this, changes); }
+            catch (Exception ex)
+            {
+                // FileSystemWatcher/Timer callbacks run on worker threads. A consumer bug must not
+                // escape the callback as an unhandled process-level exception or block other consumers.
+                ReportError($"A project-change subscriber failed: {ex.Message}");
+            }
+        }
     }
 
     private void OnError(object sender, ErrorEventArgs e) =>
         ReportError($"File monitoring error: {e.GetException().Message}. Changes may have been missed; re-inspect the project.");
 
-    private void ReportError(string message) => MonitoringError?.Invoke(this, message);
+    private void ReportError(string message)
+    {
+        var handlers = MonitoringError;
+        if (handlers is null) return;
+        foreach (EventHandler<string> handler in handlers.GetInvocationList())
+        {
+            // Error reporting is best effort: never let a UI/logger subscriber crash a watcher callback.
+            try { handler(this, message); }
+            catch (Exception) { }
+        }
+    }
 
     public void Dispose()
     {

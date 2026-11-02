@@ -360,6 +360,7 @@ docs/
   ARCHITECTURE.md         Layers, decisions, threading, dependency justification
   GAME-VERSIONS.md        RimWorld 1.6 vs 1.7 runtime differences and open questions
   IPC.md                  Local companion protocol, validation and limitations
+  CONTRIBUTOR-CODE-REVIEW.md Upstream code/license review and reuse recommendations
 DEVELOPMENT.md            Exact build / run / test / publish / troubleshooting commands
 ```
 
@@ -377,7 +378,7 @@ is informed. The three dependencies that RimPulse actually builds on are listed 
 | [RimWorldHotReload](https://github.com/xiao-e-yun/RimWorldHotReload) | xiao-e-yun | BSD-3-Clause | Hot reload prior art (milestone 6) |
 | [RimBridgeServer](https://github.com/pardeike/RimBridgeServer) | Andreas Pardeike | MIT | In-game IPC / remote control (milestones 4–5) |
 | [RimWorldDevMCP](https://github.com/search?q=RimWorldDevMCP&type=repositories) | Jeffrharr | MIT | Driving native dev actions from outside the game (milestone 5) |
-| [RimTest Redux](https://github.com/search?q=RimTest+Redux&type=repositories) | ilyvion | Custom (see repo) | In-game automated checks that a reload really happened |
+| [RimTest Redux](https://github.com/search?q=RimTest+Redux&type=repositories) | ilyvion | Apache-2.0 OR MIT (dual-licensed) | In-game automated checks that a reload really happened |
 | [Rimworld-Pickle](https://github.com/RimWorks/Rimworld-Pickle) | RimWorks | MIT | Live-session testing (milestones 5–6) |
 | [pickle-template](https://github.com/RimWorks/pickle-template) | RimWorks | MIT | Well-structured mod projects to inspect (milestones 2–3) |
 | [rimworld-logging-framework](https://github.com/RimWorks/rimworld-logging-framework) | RimWorks | MIT | Structured diagnostics for the companion mod |
@@ -394,10 +395,15 @@ is informed. The three dependencies that RimPulse actually builds on are listed 
 | [Roslyn](https://github.com/dotnet/roslyn) | Roslyn contributors (Microsoft and the .NET community) | MIT | **Shipped dependency** — compiles mod C# in-process (milestone 3) |
 | [xUnit.net](https://github.com/xunit/xunit) | xUnit.net contributors | Apache-2.0 | **Development dependency** — runs the test suite, not shipped |
 
-**Attribution policy.** If code, data or assets from any of these projects are ever adapted, the credit entry
-must be marked as adapted rather than reference, the original author must remain credited in the application,
-and the original license must be honoured. Copyleft (GPL-3.0) and unlicensed projects must not be copied into
-RimPulse without an explicit licensing decision.
+**Third-party code policy.** Contributor projects may be studied and code may be reused or adapted when it is
+clearly better suited than a clean implementation and its license permits the intended use. Before bringing
+code in, review the actual upstream license and relevant file notices; record the source repository, revision,
+files, changes, and license obligations. Preserve copyright/license notices, add required attribution, and
+assess compatibility with RimPulse's distribution and license. Copyleft code is not categorically excluded,
+but its reciprocal obligations must be understood and met before inclusion. Do not copy code from a repository
+or file with no clear license grant; ask for a licensing decision instead. Update the in-app Credits entry and
+third-party notices to distinguish code actually adapted from projects used only as references. No contributor
+project code is currently documented as copied or adapted.
 
 ## Documentation
 
