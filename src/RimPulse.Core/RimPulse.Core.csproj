@@ -8,6 +8,12 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <!-- The same small protocol constants are compiled into Core and embedded for each game backend. -->
+    <Compile Include="..\RimPulse.Companion\Shared\Protocol.cs" Link="IPC\Protocol.cs" />
+    <EmbeddedResource Include="..\RimPulse.Companion\Shared\Protocol.cs" LogicalName="RimPulse.Companion.Protocol.cs" />
+    <EmbeddedResource Include="..\RimPulse.Companion\Shared\Companion.cs" LogicalName="RimPulse.Companion.Companion.cs" />
+    <EmbeddedResource Include="..\RimPulse.Companion\RimWorld16\GameAdapter.cs" LogicalName="RimPulse.Companion.RimWorld16.cs" />
+    <EmbeddedResource Include="..\RimPulse.Companion\RimWorld17\GameAdapter.cs" LogicalName="RimPulse.Companion.RimWorld17.cs" />
   </ItemGroup>
 
 </Project>

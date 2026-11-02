@@ -12,6 +12,7 @@ using RimPulse.Core.Projects;
 using RimPulse.Core.Monitoring;
 using RimPulse.Core.Validation;
 using RimPulse.Core.Runtime;
+using RimPulse.Core.IPC;
 
 namespace RimPulse.App.ViewModels;
 
@@ -56,6 +57,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private long _buildSequence;
     private bool _runtimeRunning;
     private string _runtimeStatus = "No game launched by RimPulse.";
+    private string _companionStatus = "No companion connected.";
+    private string _runtimeProjectStatus = "No startup snapshot received.";
+    private string _runtimeModsText = "No startup snapshot received.";
+    private string _runtimeSetupStatus = "Install the companion to enable game communication. This creates a link in the selected installation's Mods folder.";
+    private bool _runtimeSetupBusy;
+    private CancellationTokenSource? _runtimeCancellation;
+    private CompanionSession? _companionSession;
+    private long _runtimeSequence;
 
     /// <summary>
     /// Upper bound on rows added to the build diagnostics list. A single failed build can report over a thousand
@@ -141,8 +150,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && CanRemoveSelectedCustomPath,
             HandleCommandException);
 
-        LaunchGameCommand = new AsyncRelayCommand(LaunchGameAsync,
-            () => !_runtimeRunning && SelectedInstallation?.IsReady == true, HandleCommandException);
+        LaunchGameCommand = new AsyncRelayCommand(() => LaunchGameAsync(false),
+            () => !_runtimeRunning && !_runtimeSetupBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
+        LaunchDevelopmentCommand = new AsyncRelayCommand(() => LaunchGameAsync(true),
+            () => !_runtimeRunning && !_runtimeSetupBusy && !IsProjectBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
+        InstallCompanionCommand = new AsyncRelayCommand(InstallCompanionAsync,
+            () => !_runtimeRunning && !_runtimeSetupBusy && SelectedInstallation?.IsReady == true, HandleCommandException);
+        LinkDevelopmentProjectCommand = new AsyncRelayCommand(LinkDevelopmentProjectAsync,
+            () => !_runtimeRunning && !_runtimeSetupBusy && !IsProjectBusy && SelectedInstallation?.IsReady == true && SelectedProject is not null,
+            HandleCommandException);
 
         ToggleCreditsCommand = new RelayCommand(() => IsCreditsOpen = !IsCreditsOpen);
         ToggleActivityLogCommand = new RelayCommand(() => IsActivityLogVisible = !IsActivityLogVisible);
@@ -151,33 +167,171 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public AsyncRelayCommand LaunchGameCommand { get; }
+    public AsyncRelayCommand LaunchDevelopmentCommand { get; }
+    public AsyncRelayCommand InstallCompanionCommand { get; }
+    public AsyncRelayCommand LinkDevelopmentProjectCommand { get; }
 
     public string RuntimeStatus
     {
         get => _runtimeStatus;
         private set => SetProperty(ref _runtimeStatus, value);
     }
+    public string CompanionStatus
+    {
+        get => _companionStatus;
+        private set => SetProperty(ref _companionStatus, value);
+    }
+    public string RuntimeProjectStatus
+    {
+        get => _runtimeProjectStatus;
+        private set => SetProperty(ref _runtimeProjectStatus, value);
+    }
+    public string RuntimeModsText
+    {
+        get => _runtimeModsText;
+        private set => SetProperty(ref _runtimeModsText, value);
+    }
+    public string RuntimeSetupStatus
+    {
+        get => _runtimeSetupStatus;
+        private set => SetProperty(ref _runtimeSetupStatus, value);
+    }
 
-    private async Task LaunchGameAsync()
+    private void RefreshRuntimeCommands()
+    {
+        LaunchGameCommand.RaiseCanExecuteChanged();
+        LaunchDevelopmentCommand.RaiseCanExecuteChanged();
+        InstallCompanionCommand.RaiseCanExecuteChanged();
+        LinkDevelopmentProjectCommand.RaiseCanExecuteChanged();
+    }
+
+    private async Task InstallCompanionAsync()
     {
         var installation = SelectedInstallation?.Model;
-        if (installation is null || _runtimeRunning) return;
-        _runtimeRunning = true;
-        RuntimeStatus = $"Starting RimWorld {installation.Version.ShortVersion} from {installation.RootPath}…";
-        LaunchGameCommand.RaiseCanExecuteChanged();
+        if (installation is null || _runtimeRunning || _runtimeSetupBusy) return;
+        _runtimeSetupBusy = true;
+        RefreshRuntimeCommands();
+        RuntimeSetupStatus = "Compiling the companion against the selected game's own assemblies…";
         try
         {
-            using var process = await Task.Run(() => GameProcessLauncher.Start(installation));
+            var result = await Task.Run(() => CompanionInstaller.BuildAndLink(installation, _paths));
+            if (_disposed) return;
+            RuntimeSetupStatus = $"Companion prepared at {result.ModDirectory} and linked at {result.GameLink}. " +
+                "Use Launch isolated development to enable it in a separate profile, or enable it manually in your normal game.";
+            _log.Info("Runtime", RuntimeSetupStatus, result.Warnings.Count == 0 ? null : string.Join(Environment.NewLine, result.Warnings));
+        }
+        catch (Exception ex)
+        {
+            if (_disposed) return;
+            RuntimeSetupStatus = "Companion setup failed: " + ex.Message;
+            _log.Error("Runtime", RuntimeSetupStatus, ex);
+        }
+        finally
+        {
+            _runtimeSetupBusy = false;
+            if (!_disposed) RefreshRuntimeCommands();
+        }
+    }
+
+    private async Task LinkDevelopmentProjectAsync()
+    {
+        var installation = SelectedInstallation?.Model;
+        var projectPath = SelectedProject?.Path;
+        if (installation is null || projectPath is null || _runtimeRunning || _runtimeSetupBusy) return;
+        _runtimeSetupBusy = true;
+        RefreshRuntimeCommands();
+        try
+        {
+            var link = await Task.Run(() => DevelopmentProjectLink.Link(installation, projectPath));
+            if (_disposed) return;
+            RuntimeSetupStatus = $"The selected project is discoverable at {link}. The link does not copy or modify the project.";
+            _log.Info("Runtime", RuntimeSetupStatus);
+        }
+        catch (Exception ex)
+        {
+            if (_disposed) return;
+            RuntimeSetupStatus = "Could not link the selected project: " + ex.Message;
+            _log.Error("Runtime", RuntimeSetupStatus, ex);
+        }
+        finally
+        {
+            _runtimeSetupBusy = false;
+            if (!_disposed) RefreshRuntimeCommands();
+        }
+    }
+
+    private async Task LaunchGameAsync(bool isolated)
+    {
+        var installation = SelectedInstallation?.Model;
+        var projectPath = SelectedProject?.Path; // This launch keeps its own selection even if the UI changes later.
+        if (installation is null || _runtimeRunning || _runtimeSetupBusy) return;
+        _runtimeRunning = true;
+        var sequence = ++_runtimeSequence;
+        RefreshRuntimeCommands();
+        RuntimeStatus = $"Starting RimWorld {installation.Version.ShortVersion} from {installation.RootPath}…";
+        CompanionStatus = "Waiting for companion; it must be installed and enabled in this game's mod list.";
+        RuntimeProjectStatus = "Waiting for a startup mod snapshot.";
+        RuntimeModsText = "Waiting for a startup mod snapshot.";
+        using var cancellation = new CancellationTokenSource();
+        _runtimeCancellation = cancellation;
+        CompanionSession? session = null;
+        Task? monitor = null;
+        try
+        {
+            if (isolated && !await Task.Run(() => CompanionInstaller.IsInstalled(installation, _paths)))
+                throw new InvalidOperationException("Install or rebuild the companion link for this game version before launching a development profile.");
+            if (_disposed) return;
+            var project = projectPath is null ? null : await Task.Run(() => ModProjectInspector.Inspect(projectPath));
+            if (_disposed) return;
+            if (isolated && projectPath is not null && string.IsNullOrWhiteSpace(project?.Metadata?.PackageId))
+                throw new InvalidOperationException("The selected project needs a readable About.xml with a packageId for an isolated launch.");
+            var packageId = project?.Metadata?.PackageId;
+            var profile = isolated ? await Task.Run(() => DevelopmentProfile.Create(_paths, installation, packageId)) : null;
+            if (_disposed) return;
+            session = new CompanionSession();
+            _companionSession = session;
+            var options = new GameLaunchOptions(profile, session.ChildEnvironment);
+            using var process = await Task.Run(() => GameProcessLauncher.Start(installation, options));
             var description = $"RimWorld {installation.Version.ShortVersion} (PID {process.Id})";
             if (!_disposed)
             {
-                RuntimeStatus = $"Running {description} from {installation.RootPath}.";
+                RuntimeStatus = $"Running {description} from {installation.RootPath}." +
+                    (profile is null ? " Normal game configuration." : $" Separate save-data profile: {profile}");
                 _log.Info("Runtime", RuntimeStatus);
             }
+            monitor = session.MonitorAsync(process.Id, installation.Version, change => Dispatcher.UIThread.Post(() =>
+            {
+                if (_disposed || sequence != _runtimeSequence) return;
+                CompanionStatus = change.Message;
+                if (change.Snapshot is { } snapshot)
+                {
+                    CompanionStatus += $" Game reports {snapshot.GameVersion} (PID {snapshot.ProcessId}).";
+                    RuntimeProjectStatus = RuntimeProjectMatch.Describe(snapshot, packageId, projectPath);
+                    RuntimeModsText = snapshot.Mods.Count == 0 ? "The game reported no loaded mods." :
+                        string.Join(Environment.NewLine, snapshot.Mods.Select(mod => $"{mod.Name}  [{mod.PackageId}]  —  {mod.RootDir}"));
+                }
+                else
+                {
+                    RuntimeProjectStatus = "No authenticated companion snapshot is currently available.";
+                    RuntimeModsText = "No active companion connection.";
+                }
+                _log.Info("Runtime", CompanionStatus);
+            }), cancellation.Token);
+            _ = monitor.ContinueWith(task => Dispatcher.UIThread.Post(() =>
+            {
+                if (_disposed || sequence != _runtimeSequence) return;
+                var error = task.Exception?.GetBaseException();
+                CompanionStatus = "Companion listener failed: " + (error?.Message ?? "unknown error");
+                _log.Error("Runtime", CompanionStatus, error);
+            }), CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
             await process.WaitForExitAsync();
             if (!_disposed)
             {
+                ++_runtimeSequence; // Ignore queued connection callbacks after the game exits.
                 RuntimeStatus = $"{description} exited with code {process.ExitCode}.";
+                CompanionStatus = "Game exited; companion disconnected.";
+                RuntimeProjectStatus = "No game is running.";
+                RuntimeModsText = "No game is running.";
                 _log.Info("Runtime", RuntimeStatus);
             }
         }
@@ -185,14 +339,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (!_disposed)
             {
+                ++_runtimeSequence;
                 RuntimeStatus = "Could not launch or monitor the game: " + ex.Message;
+                CompanionStatus = "No companion connected.";
+                RuntimeProjectStatus = "No active companion snapshot is available.";
+                RuntimeModsText = "No active companion snapshot is available.";
                 _log.Error("Runtime", RuntimeStatus, ex);
             }
         }
         finally
         {
+            cancellation.Cancel();
+            session?.Dispose();
+            if (monitor is not null)
+            {
+                try { await monitor; }
+                catch (Exception ex) { if (!_disposed) _log.Error("Runtime", "Companion listener failed.", ex); }
+            }
+            if (ReferenceEquals(_companionSession, session)) _companionSession = null;
+            if (ReferenceEquals(_runtimeCancellation, cancellation)) _runtimeCancellation = null;
             _runtimeRunning = false;
-            if (!_disposed) LaunchGameCommand.RaiseCanExecuteChanged();
+            if (!_disposed) RefreshRuntimeCommands();
         }
     }
 
@@ -226,6 +393,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             RemoveProjectCommand.RaiseCanExecuteChanged();
+            RefreshRuntimeCommands();
 
             if (value is null)
             {
@@ -267,6 +435,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             InspectProjectCommand.RaiseCanExecuteChanged();
             AddProjectCommand.RaiseCanExecuteChanged();
             RemoveProjectCommand.RaiseCanExecuteChanged();
+            RefreshRuntimeCommands();
         }
     }
     public string ProjectPathInput
@@ -983,6 +1152,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _runtimeCancellation?.Cancel();
+        _companionSession?.Dispose();
         StopProjectMonitor();
         _copyNoticeTimer.Stop();
         _log.EntryWritten -= OnLogEntry;
@@ -1086,7 +1257,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            LaunchGameCommand.RaiseCanExecuteChanged();
+            RefreshRuntimeCommands();
             RebuildSelectedDetails();
 
             // The load-folder projection depends on the selected game version.

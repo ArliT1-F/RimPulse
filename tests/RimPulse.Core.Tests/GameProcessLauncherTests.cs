@@ -46,6 +46,8 @@ public sealed class GameProcessLauncherTests
         using var temp = new TempDirectory();
         FakeInstallation.CreateUnity(temp.Root);
         var selected = InstallationProbe.Probe(temp.Root);
+        File.WriteAllText(Path.Combine(temp.Root, "Version.txt"), "1.6.4852 rev1249");
+        Assert.Throws<InvalidOperationException>(() => GameProcessLauncher.Start(selected));
         File.WriteAllText(Path.Combine(temp.Root, "Version.txt"), "1.7.0");
         Assert.Throws<InvalidOperationException>(() => GameProcessLauncher.Start(selected));
     }

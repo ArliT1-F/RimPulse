@@ -50,7 +50,7 @@ This repository is being built incrementally, one milestone at a time. Features 
 | **1 — Foundation** | Avalonia desktop shell, configuration persistence, RimWorld installation detection (1.6 / 1.7), installation selection UI, Linux-first build | **Implemented** |
 | 2 — Project management | Mod project directories, `About.xml` parsing, structure detection, dependency detection, file monitoring | **In progress** — multiple-project inspection and monitoring implemented; dependency resolution remains |
 | 3 — Build & validation | `.csproj` detection, game reference resolution, Roslyn compilation, XML validation, assembly inspection | **In progress** — changed-file XML syntax checks plus conservative per-file `Defs` structure checks |
-| 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | **In progress** — direct Linux launch and process exit monitoring; no companion or IPC yet |
+| 4 — Runtime integration | Companion mods (1.6 / 1.7), IPC, process management, runtime status | **In progress / experimental** — opt-in 1.6/1.7 companions, local IPC and separate profiles implemented; real-game verification pending |
 | 5 — Testing environment | Minimal world/map generation, configurable world features, Developer Mode integration, entity spawning, tick controls | Not started |
 | 6 — Live reload | Asset reload, definition reload, assembly reload research per version, restart fallback | Not started |
 | 7 — Packaging | AppImage, `.deb`, desktop entry, Windows packaging | Not started |
@@ -96,15 +96,24 @@ This repository is being built incrementally, one milestone at a time. Features 
   copy and reported, never silently duplicated.
 - Writes a build's **inputs, reference set, first diagnostics and error-code histogram** to the log, so a
   failed build can be diagnosed from the log file alone (the summary line only carries counts).
-- Launches the selected 1.6 or 1.7 Linux executable directly and displays the process ID and exit code. Only one launch from RimPulse can be monitored at a time. The game uses its normal configuration; close it normally to save. Closing RimPulse leaves it running. A process being alive does not mean the game or any mod is loaded. This has not yet been verified against real game installations.
+- Launches the selected 1.6 or 1.7 Linux executable directly and displays its process ID and exit code. Only
+  one launch can be monitored at a time. A normal launch uses the normal configuration; an optional experimental
+  launch uses a separate save-data profile. Closing RimPulse leaves the game running.
+- Opt-in setup builds a companion against the selected installation and links it into the game's `Mods/` folder.
+  A launch-specific, authenticated loopback connection reports the game's version and a **startup-only snapshot**
+  of running mods, with separate indicators for process, companion and selected-project match. A live process or
+  even a companion snapshot is not proof that the main menu loaded or that every mod initialized successfully.
+  Synthetic tests exercise both build paths and the 1.7 protocol; neither companion has been verified in a real game.
 - Streams diagnostics to a bounded in-app activity log and a rotating log file.
 - Ships an in-app **Credits** panel that features every referenced project and creator with its license and
   why it matters (see [Credits and references](#credits-and-references)).
-- Foundation tests previously passed in CI; the new project, monitoring and XML tests require a fresh CI run.
+- The solution build and official tests passed in GitHub Actions for code commit `9a9cc1d`; real-game checks remain.
 
 ### Deliberately not there yet
 
-No dependency resolution against installed mods, no complete XML schema/semantic validation or cross-file `defName`/inheritance checks, no companion mod, IPC, managed mod configuration, loaded-mod reporting, hot reload or testing environment. Those are later milestones; nothing in the UI pretends otherwise.
+No automatic mod/dependency or DLC resolution, no persistent reusable development profile, no complete XML
+schema/semantic validation or cross-file `defName`/inheritance checks, no live mod-list updates, hot reload,
+in-game command channel or testing environment. These are later work; a startup snapshot is not a live reload.
 
 ---
 
@@ -223,9 +232,49 @@ Each candidate is inspected, not trusted:
 Directories discovered automatically that are not usable installations are ignored. Paths **you** add are
 always reported, together with the reason they cannot be used.
 
+## Experimental companion and development profile (Linux)
+
+This workflow is implemented but **not yet verified against actual 1.6/1.7 game installations**. Back up your
+normal RimWorld configuration and saves before testing. A separate save-data profile is **not a security
+sandbox**: game logs, Unity/engine preferences and arbitrary mods may still use shared paths, and 1.7 behavior
+needs verification. The game's installation `Mods/` folder remains shared.
+
+1. Select an installation and development project. Optionally **Build mod** first; this writes to the project's
+   assembly output as described above.
+2. In **Runtime**, explicitly choose **Install companion link**. RimPulse compiles its 1.6 or 1.7 adapter
+   against that installation, writes an installation-specific generated mod under its state directory, and creates a symlink named
+   `Mods/RimPulse.Companion`. It will not replace a pre-existing unrelated file, directory or link.
+3. If your selected project is not already discoverable by the game, explicitly choose **Link selected project**.
+   This creates a separate `Mods/RimPulse-Dev-<hash>` symlink without replacing an existing path. Avoid duplicate
+   copies of the same package ID; a package ID match alone is not proof that the selected directory loaded.
+4. Choose **Launch isolated development**. RimPulse requires its companion link and a build stamped for the
+   selected game version; reinstall it after a game update. A fresh profile is created under RimPulse's state
+   directory for **each** launch; its initial `ModsConfig.xml` selects Core, the companion and the selected project's
+   package ID. RimPulse does not select other mods, dependencies or DLC; the game may enable newly discovered
+   expansions itself. Add what you need in that game's mod menu and restart as required. A restart that creates
+   a new process is not monitored by the old session; a later isolated launch creates another fresh profile.
+5. Watch the separate process and companion statuses. Once connected, inspect the game-reported version and
+   startup mod list. A project is matched only when both its package ID and directory agree. The snapshot is
+   repeated as a heartbeat but **does not update during the session**. A connection confirms neither main-menu
+   readiness nor successful mod initialization. If it never connects, inspect the game log and RimPulse log.
+
+**Launch RimWorld normally** instead uses your normal configuration and only loads the companion if it is enabled there.
+Installing a symlink alone does not change your normal `ModsConfig.xml`. On leaving RimPulse the game remains
+running, and the companion eventually stops trying to reconnect. See [`docs/IPC.md`](docs/IPC.md) for the
+wire contract and security limits.
+
+### Cleanup
+
+With the game and RimPulse closed, inspect `Mods/RimPulse.Companion` and `Mods/RimPulse-Dev-<hash>` and remove
+**only those links that point to the directories you chose**; do not follow the links or delete the target
+project. Remove no other mod files. The generated companion lives under `<RimPulse state>/companion/` and
+retained per-launch save/config profiles under `<RimPulse state>/runtime-sessions/`; inspect and back up
+anything you want before deleting those state subdirectories. They are not removed automatically.
+
 ## Where RimPulse stores data
 
-RimPulse never writes into your RimWorld installation or your mod directories.
+RimPulse writes build output into a mod only on **Build mod**. The two explicit setup actions above may create
+links under the game's shared `Mods/` directory. It does not directly rewrite the normal game configuration.
 
 | Platform | Configuration | State / logs |
 | --- | --- | --- |
@@ -249,6 +298,8 @@ src/
     Monitoring/           Batched file notifications and classification
     Build/                Project discovery, game reference resolution, Roslyn compilation
     Validation/           Changed XML syntax and basic Defs structure checks
+    Runtime/ IPC/         Companion installation, development profiles, launch and authenticated status
+  RimPulse.Companion/     Shared protocol/client and separately compiled 1.6 / 1.7 adapters
   RimPulse.App/           Avalonia desktop application (MVVM, hand-written, no MVVM framework)
     Views/ ViewModels/ Styles/ Converters/ Services/
 tests/
@@ -256,7 +307,8 @@ tests/
 docs/
   SPEC.md                 The verbatim project brief
   ARCHITECTURE.md         Layers, decisions, threading, dependency justification
-  GAME-VERSIONS.md        Verified RimWorld 1.6 vs 1.7 runtime differences and open questions
+  GAME-VERSIONS.md        RimWorld 1.6 vs 1.7 runtime differences and open questions
+  IPC.md                  Local companion protocol, validation and limitations
 DEVELOPMENT.md            Exact build / run / test / publish / troubleshooting commands
 ```
 
@@ -283,6 +335,10 @@ is informed. The three dependencies that RimPulse actually builds on are listed 
 | [RimWorks (organisation)](https://github.com/RimWorks) | RimWorks | Mixed, mostly MIT | Engineering-first mod tooling |
 | [RimSort](https://github.com/RimSort/RimSort) | RimSort contributors | GPL-3.0 | Mod metadata and load-order handling (reference only) |
 | [RimworldXsd](https://github.com/Ragonfana/RimworldXsd) | Ragonfana | No license declared | XML validation (reference only) |
+| [RimWorld 1.6 decompilation](https://github.com/32bitx64bit/RW-Decompiled-1.6) | 32bitx64bit; game code by Ludeon Studios | No license declared; proprietary game code | Read-only research on startup, mod discovery and paths; no code copied |
+| [RimWorld auto test](https://github.com/xtzhyhydwl/RimWorld_auto_test) | xtzhyhydwl | No license declared | Reference for separate profile and 1.7 launch observations |
+| [RimLoc](https://github.com/0-danielviktorovich-0/RimLoc) | 0-danielviktorovich-0 | GPL-3.0 | Reference on profile isolation limits; no code copied |
+| [AI in RimWorld](https://github.com/ryseymour/ai-in-rimworld) | ryseymour | No license declared | Linux launch and config research; no code copied |
 | [Avalonia](https://github.com/AvaloniaUI/Avalonia) | Avalonia Team | MIT | **Shipped dependency** — the desktop UI framework |
 | [Roslyn](https://github.com/dotnet/roslyn) | Roslyn contributors (Microsoft and the .NET community) | MIT | **Shipped dependency** — compiles mod C# in-process (milestone 3) |
 | [xUnit.net](https://github.com/xunit/xunit) | xUnit.net contributors | Apache-2.0 | **Development dependency** — runs the test suite, not shipped |
@@ -296,26 +352,19 @@ RimPulse without an explicit licensing decision.
 
 - [`docs/SPEC.md`](docs/SPEC.md) — the product brief (verbatim).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — module boundaries, design decisions, extension points.
+- [`docs/IPC.md`](docs/IPC.md) — versioned companion protocol, threat model and readiness semantics.
 - [`docs/GAME-VERSIONS.md`](docs/GAME-VERSIONS.md) — what is verified about RimWorld 1.6 vs 1.7, what is
   unverified, and what must be confirmed against a real installation before milestones 4–6.
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — commands and troubleshooting.
 
 ## Verification status
 
-Honesty matters more than a green checkmark. Current state, on Ubuntu with the .NET 10 SDK (GitHub Actions):
-
 | Check | Result |
 | --- | --- |
-| `dotnet build RimPulse.slnx -c Release` | **Passes in CI** (GitHub Actions, Ubuntu, .NET 10) with warnings as the compiler sees them; no warnings in the last run |
-| `dotnet test RimPulse.slnx -c Release` | **Passes in CI** — includes the project, `LoadFolders`, build-input, test-project detection, reference-resolution, Roslyn compiler and assembly-inspection tests |
-| The desktop window on a real desktop | **Verified locally for the previous milestone** — the app started, detected an installation and inspected a mod directory on Linux. The new project list and build panel have not been run on a desktop yet |
-| Detection against a real RimWorld installation | **Partially verified** — a scan on the author's machine reported one installation; whether its version was confirmed was not recorded |
-| Building a real mod against a real installation | **Not verified** — the compiler is exercised in CI against the test runtime's assemblies, not against game assemblies from a real install |
-| Windows / macOS runtime behaviour | **Not verified** — path handling is unit tested for all three platforms |
+| Full `dotnet build` / official `dotnet test` for these changes | **Passed in GitHub Actions** on Ubuntu with .NET 10 for code commit `9a9cc1d`. The local development environment lacks the SDK and NuGet access. |
+| Core and companion synthetic checks | **Partial** — Core compiled and 283 cases passed with a temporary .NET 10/Roslyn reflection harness and xUnit-compatible shims. Synthetic 1.6/1.7 references exercise both companion build paths; an in-process fake 1.7 game completes the authenticated snapshot exchange. These are not real game assemblies or an official SDK test run. |
+| Avalonia desktop | **Build passed in CI**, including XAML and compiled bindings; the updated UI has not been exercised in a real desktop session. |
+| Real installations | **Not verified for this increment** — build and load both companions, verify isolated profile behavior and check status on real Linux 1.6 and 1.7 installations. A process, connection or startup snapshot alone does not demonstrate main-menu readiness or successful mod initialization. |
+| Windows / macOS runtime launch | **Not implemented** — direct launch and companion setup are currently Linux-only. |
 
-CI has earned its keep twice: it found a real defect (the log sink left no active log file after a rotation,
-which would break `tail -f`) and several wrong test expectations. Only green-that-is-true counts here.
-
-Everything except installation detection and the compiler's use against real game assemblies runs without
-RimWorld installed, so the suite works on any development machine; see
-[`DEVELOPMENT.md`](DEVELOPMENT.md#verification-status).
+See [`DEVELOPMENT.md`](DEVELOPMENT.md#7-verification-status) for commands and the real-game checklist.
