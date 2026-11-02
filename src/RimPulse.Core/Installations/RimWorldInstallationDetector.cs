@@ -21,20 +21,22 @@ public sealed class RimWorldInstallationDetector : IRimWorldInstallationDetector
 
     public Task<IReadOnlyList<RimWorldInstallation>> DetectAsync(
         IEnumerable<string>? additionalRootPaths = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool scanWellKnownLocations = true)
     {
         var extraRoots = additionalRootPaths?.Where(path => !string.IsNullOrWhiteSpace(path)).ToArray() ?? [];
 
         // Discovery touches the file system, so it never runs on the UI thread.
         return Task.Run<IReadOnlyList<RimWorldInstallation>>(
-            () => Detect(extraRoots, cancellationToken),
+            () => Detect(extraRoots, cancellationToken, scanWellKnownLocations),
             cancellationToken);
     }
 
     /// <summary>Synchronous discovery, exposed for tests and for callers that already run off-thread.</summary>
     public IReadOnlyList<RimWorldInstallation> Detect(
         IEnumerable<string>? additionalRootPaths = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool scanWellKnownLocations = true)
     {
         var candidates = new List<InstallationCandidate>();
 
@@ -57,12 +59,12 @@ public sealed class RimWorldInstallationDetector : IRimWorldInstallationDetector
             candidates.Add(new InstallationCandidate(_options.EnvironmentRimWorldDirectory!, InstallationSource.EnvironmentVariable));
         }
 
-        if (_options.ScanSteamLibraries)
+        if (scanWellKnownLocations && _options.ScanSteamLibraries)
         {
             CollectSteamCandidates(candidates, cancellationToken);
         }
 
-        if (_options.ScanGogDirectories)
+        if (scanWellKnownLocations && _options.ScanGogDirectories)
         {
             CollectGogCandidates(candidates, cancellationToken);
         }

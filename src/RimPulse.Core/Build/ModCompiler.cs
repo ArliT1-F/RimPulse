@@ -49,7 +49,8 @@ public sealed record CompileRequest(
     bool AllowUnsafe = false,
     bool NullableEnabled = false,
     string? OutputPath = null,
-    bool EmitDebugSymbols = true);
+    bool EmitDebugSymbols = true,
+    bool Release = false);
 
 /// <summary>The outcome of a compile: what was produced, and every diagnostic with its location.</summary>
 public sealed record CompilationResult(
@@ -89,7 +90,6 @@ public sealed record CompilationResult(
 public static class ModCompiler
 {
     /// <summary>Defines a development build implies; a project's own defines are merged, not replaced.</summary>
-    private static readonly string[] ImplicitDefines = ["DEBUG", "TRACE"];
 
     public static CompilationResult Compile(CompileRequest request, CancellationToken cancellationToken = default)
     {
@@ -126,7 +126,7 @@ public static class ModCompiler
 
         var parseOptions = CSharpParseOptions.Default
             .WithLanguageVersion(ResolveLanguageVersion(request.LangVersion, problems))
-            .WithPreprocessorSymbols(MergedDefines(request.DefineConstants));
+            .WithPreprocessorSymbols(MergedDefines(request.DefineConstants, request.Release));
 
         var syntaxTrees = new List<SyntaxTree>(sourceFiles.Count);
         foreach (var file in sourceFiles)
@@ -196,7 +196,7 @@ public static class ModCompiler
 
         var options = new CSharpCompilationOptions(
             OutputKind.DynamicallyLinkedLibrary,
-            optimizationLevel: OptimizationLevel.Debug,
+            optimizationLevel: request.Release ? OptimizationLevel.Release : OptimizationLevel.Debug,
             allowUnsafe: request.AllowUnsafe,
             nullableContextOptions: request.NullableEnabled
                 ? NullableContextOptions.Enable
@@ -287,11 +287,11 @@ public static class ModCompiler
         return LanguageVersion.Latest;
     }
 
-    private static IReadOnlyList<string> MergedDefines(IReadOnlyList<string>? projectDefines)
+    private static IReadOnlyList<string> MergedDefines(IReadOnlyList<string>? projectDefines, bool release)
     {
         var defines = new List<string>();
 
-        foreach (var define in (projectDefines ?? []).Concat(ImplicitDefines))
+        foreach (var define in (projectDefines ?? []).Concat(release ? new[] { "TRACE" } : new[] { "DEBUG", "TRACE" }))
         {
             var trimmed = define?.Trim();
             if (!string.IsNullOrEmpty(trimmed)

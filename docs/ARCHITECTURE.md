@@ -41,16 +41,16 @@ RimPulse.Core/Projects      About.xml metadata, content folders, LoadFolders.xml
 RimPulse.Core/Monitoring    FileSystemWatcher with debouncing and change classification
 RimPulse.Core/Build         .csproj discovery, game reference resolution, Roslyn compilation
 RimPulse.Core/Validation    changed-file XML syntax and conservative Defs structure checks
-RimPulse.Core/Runtime       Linux launch, opt-in links and fresh save-data profiles
+RimPulse.Core/Runtime       Linux launch, opt-in links, mod catalog and reusable save-data profiles
 RimPulse.Core/IPC           bounded, authenticated loopback status listener
 RimPulse.Companion/         shared client/protocol plus separate 1.6 and 1.7 adapters
 ```
 
-Planned for later milestones (none of this exists yet):
+Planned capabilities (the listed capabilities do not exist yet):
 
 ```text
 RimPulse.Core/Validation    RimWorld schema and definition-level diagnostics
-RimPulse.Core/Runtime       reusable profiles, dependency resolution, stronger readiness tracking
+RimPulse.Core/Runtime       minimal maps, world configuration, command dispatch and stronger readiness
 RimPulse.Backends/          version-specific reload and testing implementations
 ```
 
@@ -60,7 +60,7 @@ RimPulse.Backends/          version-specific reload and testing implementations
 | --- | --- | --- |
 | Platform | `HostPlatform`, `HostPlatformExtensions` | Platform enum, detection, case-sensitivity rules. Passed explicitly instead of calling `OperatingSystem` deep in the logic, so every branch is testable from any machine |
 | Paths | `AppPaths` | XDG (Linux), `%APPDATA%`/`%LOCALAPPDATA%` (Windows), `~/Library` (macOS) resolution |
-| Configuration | `RimPulseConfiguration` | The persisted settings model (selected installation, custom paths, auto-detect) |
+| Configuration | `RimPulseConfiguration` | Schema-3 settings: paths, reusable profiles, build optimization/symbols, logging and UI preferences |
 | Configuration | `ConfigurationStore` | Async JSON load/save, atomic write (temp file + move), corrupt-file quarantine, schema version |
 | Diagnostics | `IDiagnosticLog`, `DiagnosticLog`, `RotatingFileLogSink`, `NullDiagnosticLog` | Bounded in-memory ring of log entries, event for the UI, rotating file sink capped in size and archive count |
 | Game | `GameVersion` | `major.minor` + build text, parsing of `Version.txt`, comparison, supported-version check |
@@ -83,11 +83,14 @@ RimPulse.Backends/          version-specific reload and testing implementations
 | Build | `AssemblyInspector`, `AssemblyInspection`, `AssemblyTypeInfo` | Reads a produced assembly's name, version, references and types with `System.Reflection.Metadata`; the assembly is never loaded into RimPulse, so inspecting a mod cannot run its code |
 | Runtime | `GameProcessLauncher` | Validates and starts the selected Linux executable, optionally passing a separate data path and child-only environment; returns a process handle |
 | Runtime | `CompanionInstaller`, `DevelopmentProjectLink` | Explicit Linux setup; builds embedded companion source against selected game references and creates no-overwrite links in shared `Mods/` |
-| Runtime | `DevelopmentProfile` | Creates a new retained save/config directory for each experimental isolated launch; never copies or edits the normal mod configuration |
+| Runtime | `ModCatalogReader`, `ModLoadOrder` | Reads official/local/downloaded Workshop content; resolves dependency closure, hard/advisory order and incompatibilities without executing mod code |
+| Runtime | `PersistentDevelopmentProfile` | Reuses a profile's data directory, writes managed mod configuration and exposed preferences atomically, preserves unrelated preferences/saves and rejects installation/version/path mismatches |
+| Runtime | `DevelopmentProfile` | Legacy fresh per-launch profile creator retained for compatibility; no longer used by the GUI development-launch flow |
 | Runtime | `RuntimeProjectMatch` | Matches the game startup snapshot by package ID **and** canonical project directory |
 | IPC | `CompanionSession`, `WireProtocol` | Per-launch loopback listener, mutual HMAC challenge, bounded versioned JSON status, PID/version checks and reconnect handling; see [IPC.md](IPC.md) |
 | Companion | `Shared/Companion.cs`, `RimWorld16/GameAdapter.cs`, `RimWorld17/GameAdapter.cs` | Game-thread startup snapshot and background heartbeat; separate source adapters compiled for the selected game's references. Neither is verified against a real game yet |
-| App | `MainWindowViewModel` | Installation list, selection, project inspection, monitoring, build, game process status and activity log |
+| App | `MainWindowViewModel` | Installation/project selection, monitoring, build, launch orchestration and activity log |
+| App | `ProfileEditorViewModel`, `AppSettingsViewModel` | Explicit saved-vs-draft profile editing, catalog/order presentation and application/build preferences |
 | App | `ProjectRow`, `BuildDiagnosticRow` | Presentation projections of the project list and build output |
 | App | `InstallationViewModel`, `DetailRow`, `ProblemRow` | Presentation projections of installation results |
 
@@ -171,14 +174,14 @@ library (the format subset needed is tiny).
 | D10 | `CreditUsage` distinguishes Reference / Adapted / Bundled | Keeps the attribution promise honest: a project may be studied freely, but adopting code must change the classification and keep the author credited |
 | D11 | Link opening goes through `ILinkLauncher` | Keeps process launching out of view models and gives one place to validate URLs and report failures |
 | D16 | Every label is a **`SelectableTextBlock`**, and the build panel has **Copy all errors** | An error the user cannot select has to be retyped by hand to be reported. Selection is per control, so copying a whole failed build needs one button that copies every diagnostic, not just the rows the panel is capped at |
-| D12 | `LoadFolders.xml` is **interpreted, not evaluated against a real mod list** | RimPulse does not read the game's active mods yet. Evaluating conditions against a list it does not have would be a guess, so only the mod's own `packageId` counts as active and excluded folders are shown with their condition |
+| D12 | `LoadFolders.xml` is **interpreted, not evaluated against a real mod list** | The projection uses the edited profile's configured list when installation/version match, otherwise only the mod's own package ID. It is labelled as configuration, not runtime confirmation; excluded folders retain their condition |
 | D13 | Mods are compiled **in-process with Roslyn**, not by invoking `dotnet build` | A 1.6 mod targets `net472`, which cannot be built on Linux with the .NET SDK, and invoking MSBuild would couple RimPulse to whatever toolchain the author has installed and return unstructured output |
 | D14 | The compiler **emits to memory first** | A failed build must never leave a partially written DLL in `Assemblies/` for the game to load |
 | D15 | Reference assemblies for the Waylith layout come from **the host runtime** (`TRUSTED_PLATFORM_ASSEMBLIES`) | The 1.7 installation ships the game's assemblies, not the whole framework, and RimPulse has no other honest source. Documented as an assumption to re-check against a real 1.7 installation |
 | D17 | Build output follows the mod's **version folder** | RimWorld treats a folder named after the running version (`1.6`) as the mod root for that version, so a DLL written to the top-level `Assemblies` folder next to it is not the assembly the game loads. Writing to `1.6/Assemblies` keeps the build where the game looks, while a mod without version folders keeps the single top-level folder |
 | D18 | Separate 1.6 / 1.7 companion adapters and per-installation build directories; shared wire constants | Compile against the selected game's own assemblies without overwriting another installation's build. Real game builds still need verification. |
 | D19 | Per-launch loopback secret and HMAC listener proof | Avoid exposing the token or mod list to an unauthenticated listening process; same-user process access to the environment is outside this protection. |
-| D20 | Explicit no-overwrite symlinks, fresh separate save-data profiles | Protect normal mod configuration from direct edits. The shared `Mods/` directory, engine preferences, logs and third-party mod behavior are not sandboxed. |
+| D20 | Explicit no-overwrite symlinks and reusable separate save-data profiles | Protect normal mod configuration from direct edits. The shared `Mods/` directory, engine preferences, logs and third-party mod behavior are not sandboxed. |
 
 ## 8a. Credits and attribution
 
@@ -222,9 +225,9 @@ Attribution policy (also shown in the app):
 - The compiler is exercised for real: tests compile source files against the test process's own runtime
   assemblies and assert on success, on located errors, and on nothing being written when compilation fails.
 - Synthetic companion tests build both adapters against fake APIs, and exercise a local 1.7-stub startup
-  snapshot, protocol validation, authentication, disconnects, links and per-launch profiles. The fake
+  snapshot, protocol validation, authentication, disconnects, links, reusable profile files, catalog/order planning and legacy per-launch profiles. The fake
   1.6 references are .NET 10 stand-ins, not the game's Mono assemblies.
-- UI code is not unit tested (it is thin); the logic it depends on is in Core.
+- UI code has XAML/compiled-binding build coverage but no automated desktop-input tests; filesystem and game logic remain in Core.
 - Game-dependent behaviour (milestones 4–6) will need an integration test harness against a real
   installation; the verification status must be recorded honestly per feature.
 
@@ -234,10 +237,11 @@ Attribution policy (also shown in the app):
   `RimWorld16Backend` and `RimWorld17Backend` implementations that are free to differ in reference
   resolution, assembly loading and reload strategy. No shared implementation will be forced where the
   runtimes differ.
-- **Runtime follow-up** — actual 1.6 Mono and 1.7 Waylith integrations, game-profile isolation and
-  loaded-mod semantics must be verified on real installations. Fresh profiles do not resolve dependencies;
-  persistent profile management and stronger game-readiness signals are later work. RimPulse does not attach
-  to existing game processes, and closing it leaves the launched game running.
+- **Runtime follow-up** — reusable profiles and dependency/order planning are implemented, but real-game
+  persistence, preference compatibility and readiness need verification per version. The IPC channel remains
+  read-only startup status. Minimal maps, world configuration, spawning/ticks and reset require explicit
+  version-specific adapters and confirmed commands. RimPulse does not attach to existing game processes,
+  and closing it leaves the launched game running.
 - **Reload policy** — asset/definition/assembly reload are separate capabilities with an explicit
   `stable / experimental / unsupported` rating per game version; a restart is always preferable to an
   unsafe unload.

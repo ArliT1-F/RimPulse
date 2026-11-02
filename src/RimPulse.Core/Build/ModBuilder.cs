@@ -8,7 +8,9 @@ namespace RimPulse.Core.Build;
 public sealed record ModBuildPlan(
     IReadOnlyList<ModCompileUnit> Units,
     IReadOnlyList<string> ReferencePaths,
-    string? OutputDirectory);
+    string? OutputDirectory,
+    bool Release = false,
+    bool EmitDebugSymbols = true);
 
 /// <summary>The compile result of one project inside a build.</summary>
 public sealed record BuildUnitResult(ModCompileUnit Unit, CompilationResult Compilation)
@@ -101,7 +103,7 @@ public static class ModBuilder
                     unit.LangVersion,
                     unit.AllowUnsafe,
                     unit.NullableEnabled,
-                    outputPath),
+                    outputPath, EmitDebugSymbols: plan.EmitDebugSymbols, Release: plan.Release),
                 cancellationToken);
 
             results.Add(new BuildUnitResult(unit, compilation));

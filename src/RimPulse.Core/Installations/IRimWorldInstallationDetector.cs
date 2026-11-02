@@ -9,5 +9,6 @@ public interface IRimWorldInstallationDetector
     /// </summary>
     Task<IReadOnlyList<RimWorldInstallation>> DetectAsync(
         IEnumerable<string>? additionalRootPaths = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool scanWellKnownLocations = true);
 }

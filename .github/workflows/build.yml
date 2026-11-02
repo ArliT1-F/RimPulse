@@ -61,4 +61,4 @@ jobs:
           grep -nE 'error [A-Z]+[0-9]+|\[FAIL\]|Failed!|Process completed' "$report" | head -10 | while IFS= read -r line; do
             echo "::error::$line"
           done
-          exit 0
+          exit 1

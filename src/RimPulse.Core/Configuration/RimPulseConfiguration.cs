@@ -6,7 +6,7 @@ namespace RimPulse.Core.Configuration;
 /// </summary>
 public sealed class RimPulseConfiguration
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     private const int MaxCustomInstallationPaths = 50;
 
@@ -30,6 +30,14 @@ public sealed class RimPulseConfiguration
 
     /// <summary>Whether RimPulse scans the well-known locations on startup.</summary>
     public bool AutoDetectOnStartup { get; set; } = true;
+
+    /// <summary>Reusable profiles configured entirely in the app, retained independently of runtime sessions.</summary>
+    public List<DevelopmentProfileSettings> DevelopmentProfiles { get; set; } = [];
+    public string? SelectedDevelopmentProfileId { get; set; }
+    public string BuildConfiguration { get; set; } = "Debug";
+    public bool EmitDebugSymbols { get; set; } = true;
+    public bool ShowActivityLog { get; set; } = true;
+    public string MinimumLogLevel { get; set; } = "Debug";
 
     /// <summary>Trims, de-duplicates and caps the user-managed lists so a bad file cannot hurt us.</summary>
     public void Normalize()
@@ -99,5 +107,18 @@ public sealed class RimPulseConfiguration
         }
 
         CustomInstallationPaths = cleaned;
+        var profiles = new List<DevelopmentProfileSettings>();
+        var profileIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var profile in (DevelopmentProfiles ?? []).Take(30))
+        {
+            if (profile is null) continue;
+            profile.Normalize();
+            if (profileIds.Add(profile.Id)) profiles.Add(profile);
+        }
+        DevelopmentProfiles = profiles;
+        if (!profileIds.Contains(SelectedDevelopmentProfileId ?? string.Empty)) SelectedDevelopmentProfileId = null;
+        BuildConfiguration = string.Equals(BuildConfiguration, "Release", StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug";
+        MinimumLogLevel = Enum.TryParse<Diagnostics.LogLevel>(MinimumLogLevel, true, out var level) && Enum.IsDefined(level)
+            ? level.ToString() : "Debug";
     }
 }
