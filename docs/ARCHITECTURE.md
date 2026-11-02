@@ -40,7 +40,7 @@ What each module contains today:
 RimPulse.Core/Projects      About.xml metadata, content folders, LoadFolders.xml interpretation
 RimPulse.Core/Monitoring    FileSystemWatcher with debouncing and change classification
 RimPulse.Core/Build         .csproj discovery, game reference resolution, Roslyn compilation
-RimPulse.Core/Validation    changed-file XML well-formedness checks
+RimPulse.Core/Validation    changed-file XML syntax and conservative Defs structure checks
 ```
 
 Planned for later milestones (none of this exists yet):
@@ -74,7 +74,7 @@ RimPulse.Companion/         companion mods: Shared · RimWorld16 · RimWorld17
 | App | `IClipboardService`, `SystemClipboardService` | Copies text to the system clipboard for the build-error button, keeping clipboard access out of view models. A refused copy is reported, never thrown |
 | App | `CreditEntryViewModel` | Owns the per-row link commands so the credits list needs no ancestor bindings |
 | Projects | `LoadFoldersReader`, `LoadFoldersDocument`, `LoadFolderPlan` | Parses `LoadFolders.xml` (version sections, the four condition attributes, `_steam` suffix) and projects it onto one game version for a given set of active package IDs |
-| Build | `BuildInputDiscovery`, `MsBuildPropertySet`, `ModCompileUnit` | Finds `.csproj` files and evaluates the documented MSBuild subset: properties (from the project, the nearest `Directory.Build.props`, imported props files, environment and caller-supplied global properties), conditions, SDK default source items and `Compile` globs, `HintPath` references, `ProjectReference` and `PackageReference`. Orders projects so dependencies come first |
+| Build | `BuildInputDiscovery`, `MsBuildPropertySet`, `ModCompileUnit` | Finds `.csproj` files and evaluates the documented MSBuild subset: properties (from the project, the nearest `Directory.Build.props`, imported props files, environment and caller-supplied global properties), conditions, first-match `Choose` branches, SDK default source items and `Compile` globs, `HintPath` references, `ProjectReference` and `PackageReference`. Orders projects so dependencies come first |
 | Build | `GameReferenceResolver`, `GameReferenceSet` | Collects the installation's assemblies and, for the Waylith layout, the host runtime's framework assemblies. Reference assemblies only; nothing is loaded or executed |
 | Build | `ModCompiler`, `CompileRequest`, `CompilationResult`, `BuildDiagnostic` | In-process Roslyn compilation into memory; the assembly is written only after success |
 | Build | `ModBuilder`, `ModBuildPlan`, `ModBuildResult` | Compiles the units in order, feeding each output to the projects that reference it |
@@ -202,8 +202,8 @@ Attribution policy (also shown in the app):
   legacy with explicit `Compile`/`HintPath` items), including the paths MSBuild writes with backslashes.
 - MSBuild property evaluation is tested for what a mod project depends on: expansion order, the nearest
   `Directory.Build.props`, `Import`ed props files (including a cycle), the conditions in use (`==`, `and`,
-  `Exists()`, `$(OS)`), the conditions that are reported instead of guessed, and the fallback to the selected
-  installation when a hint path points somewhere this machine does not have.
+  `Exists()`, `$(OS)`), first-match `Choose` property/item branches, the conditions that are reported instead
+  of guessed, and fallback to the selected installation when a hint path points somewhere this machine does not have.
 - The compiler is exercised for real: tests compile source files against the test process's own runtime
   assemblies and assert on success, on located errors, and on nothing being written when compilation fails.
 - UI code is not unit tested (it is thin); the logic it depends on is in Core.

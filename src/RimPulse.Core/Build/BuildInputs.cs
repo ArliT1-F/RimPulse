@@ -10,8 +10,9 @@ namespace RimPulse.Core.Build;
 /// <remarks>
 /// RimPulse evaluates the MSBuild subset a mod project actually uses — properties (including the nearest
 /// <c>Directory.Build.props</c>, imported props files and caller-supplied global properties), understood
-/// <c>Condition</c>s, SDK default source inclusion and file globs — and reports everything outside it: a
-/// condition or item function it cannot evaluate, an unsupported item feature, or a package it cannot restore.
+/// <c>Condition</c>s, first-match <c>Choose</c> branches, SDK default source inclusion and file globs — and reports
+/// everything outside it: a condition or item function it cannot evaluate, an unsupported item feature, or a
+/// package it cannot restore.
 /// A project that needs more than that is a known limitation, not a silent failure.
 /// </remarks>
 public sealed record ModCompileUnit(
@@ -206,8 +207,9 @@ public static class BuildInputDiscovery
             return string.IsNullOrEmpty(value) ? null : value;
         }
 
+        var selectedChooseBranches = new Dictionary<XElement, XElement?>();
         IEnumerable<XElement> ProjectItems(string name)
-            => Items(root, name, properties, displayName, problems);
+            => Items(root, name, properties, displayName, problems, selectedChooseBranches);
 
         // Read straight from the project file: detection must not evaluate conditions a second time, because an
         // unevaluable condition is reported and would then be reported twice.
@@ -878,18 +880,29 @@ public static class BuildInputDiscovery
         string name,
         MsBuildPropertySet properties,
         string projectName,
-        List<string> problems)
+        List<string> problems,
+        Dictionary<XElement, XElement?> selectedChooseBranches)
     {
-        foreach (var group in root.Elements().Where(element => element.Name.LocalName == "ItemGroup"))
+        foreach (var child in root.Elements())
         {
-            if (!properties.EvaluateCondition(group, projectName, problems))
+            if (child.Name.LocalName == "ItemGroup")
             {
-                continue;
+                if (!properties.EvaluateCondition(child, projectName, problems)) continue;
+                foreach (var item in child.Elements().Where(element => element.Name.LocalName == name))
+                    yield return item;
             }
-
-            foreach (var item in group.Elements().Where(element => element.Name.LocalName == name))
+            else if (child.Name.LocalName == "Choose")
             {
-                yield return item;
+                if (!selectedChooseBranches.TryGetValue(child, out var selected))
+                {
+                    selected = properties.SelectChooseBranch(child, projectName, problems);
+                    selectedChooseBranches.Add(child, selected);
+                }
+                if (selected is not null)
+                {
+                    foreach (var item in Items(selected, name, properties, projectName, problems, selectedChooseBranches))
+                        yield return item;
+                }
             }
         }
     }
