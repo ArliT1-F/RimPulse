@@ -221,9 +221,15 @@ dotnet publish ──► publish directory ──► validate_publish / stage_pa
                                               └─ refuses an incomplete payload or escaping symlinks
 ```
 
+`packaging/linux/appimagetool.env` is the single, sourceable pin for the `appimagetool` version, URLs and
+SHA-256 values; both `fetch-appimagetool.sh` (local builds) and the release workflow consume it, so a
+user's AppImage and CI's AppImage are made with the same verified tool. The fetch script's default output
+location is auto-detected by `build-appimage.sh`, and a pasted example path is rejected with guidance.
+
 `packaging/linux/verify.sh` exercises this pipeline with a fake payload on every push: script syntax,
-generated icon assets, desktop/control metadata, `.deb` structure and control fields (both dependency
-sets), the AppDir layout and the refusal cases. The `release.yml` workflow repeats it with real published
+generated icon assets, desktop/control metadata, the pin and its CI wiring, `.deb` structure and control
+fields (both dependency sets), the install hint, the AppDir layout, the `appimagetool` invocation,
+auto-detection, placeholder rejection and the other refusal cases. The `release.yml` workflow repeats it with real published
 output on `v*` tags, verifies a pinned `appimagetool` SHA-256, and uploads artifacts plus a draft release.
 No packaging step needs a display server or a game installation, but none of them proves that the installed
 application opens a window — that check is still outstanding (see `DEVELOPMENT.md` §7).

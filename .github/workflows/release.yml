@@ -16,10 +16,8 @@ permissions:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
-  # appimagetool 1.9.1, verified against the upstream release asset digest. Tag builds must not silently
-  # switch to a different tool; bump this pin (and the URL) deliberately.
-  APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
-  APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+  # The appimagetool version/URL/SHA-256 pin lives in packaging/linux/appimagetool.env and is used by
+  # fetch-appimagetool.sh below, so CI and local builds verify exactly the same binary.
 
 jobs:
   version:
@@ -79,9 +77,9 @@ jobs:
 
       - name: Download and verify appimagetool
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/appimagetool" "$APPIMAGETOOL_URL"
-          echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
-          chmod +x "$RUNNER_TEMP/appimagetool"
+          # Same pinned, checksum-verified tool that a local build gets from fetch-appimagetool.sh.
+          bash packaging/linux/fetch-appimagetool.sh --output "$RUNNER_TEMP/rimpulse-tools" > "$RUNNER_TEMP/appimagetool-path"
+          cat "$RUNNER_TEMP/appimagetool-path"
 
       - name: Build AppImage
         run: |
@@ -91,7 +89,7 @@ jobs:
             --arch amd64 \
             --runtime self-contained \
             --output artifacts/packages \
-            --appimagetool "$RUNNER_TEMP/appimagetool" \
+            --appimagetool "$(cat "$RUNNER_TEMP/appimagetool-path")" \
             --extract-and-run
 
       - name: Write checksums

@@ -158,9 +158,15 @@ dotnet publish src/RimPulse.App -c Release -r linux-x64 --self-contained true \
     -o artifacts/publish/linux-x64
 
 bash packaging/linux/build-deb.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0
+
+bash packaging/linux/fetch-appimagetool.sh        # downloads the SHA-256-verified appimagetool 1.9.1
 bash packaging/linux/build-appimage.sh --publish-dir artifacts/publish/linux-x64 --version 0.7.0 \
-    --appimagetool /path/to/appimagetool-x86_64.AppImage --extract-and-run
+    --extract-and-run
 ```
+
+`fetch-appimagetool.sh` places the verified tool under `artifacts/tools/`, which `build-appimage.sh`
+picks up automatically; `--appimagetool PATH` is only needed if you keep it elsewhere. Install the `.deb`
+with the absolute path the build script prints (`sudo apt install /abs/path/rimpulse_0.7.0_amd64.deb`).
 
 `v*` tags run the release workflow, which also builds a portable Windows ZIP and creates a **draft**
 release. `packaging/linux/verify.sh` smoke-tests the scripts, icons, `.deb` control fields and AppDir on

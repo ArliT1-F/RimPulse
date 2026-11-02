@@ -54,9 +54,28 @@ for placeholder in '@VERSION@' '@ARCH@' '@DEPENDS@' '@INSTALLED_SIZE@'; do
 done
 pass "desktop entry, SVG icon and control template are complete"
 
+# 3b. The appimagetool pin must be well formed and shared with CI, and the docs must not tell users to
+# paste a placeholder path (the exact mistake this increment fixes).
+bash "$PACKAGING_LINUX_DIR/fetch-appimagetool.sh" --check >/dev/null 2>&1 ||
+    fail "fetch-appimagetool.sh --check rejected the amd64 pin"
+bash "$PACKAGING_LINUX_DIR/fetch-appimagetool.sh" --check --arch arm64 >/dev/null 2>&1 ||
+    fail "fetch-appimagetool.sh --check rejected the aarch64 pin"
+bash "$PACKAGING_LINUX_DIR/fetch-appimagetool.sh" --help >/dev/null 2>&1 ||
+    fail "fetch-appimagetool.sh --help failed"
+grep -qF 'fetch-appimagetool.sh' "$REPO_ROOT/.github/workflows/release.yml" ||
+    fail "the release workflow no longer uses the shared appimagetool pin"
+for doc in README.md DEVELOPMENT.md packaging/README.md; do
+    if grep -qF '/path/to/appimagetool' "$REPO_ROOT/$doc"; then
+        fail "$doc still tells users to pass a placeholder appimagetool path"
+    fi
+done
+pass "appimagetool pin, CI wiring and documentation commands"
+
 # 4. End-to-end .deb from a fake publish payload.
 work="$(mktemp -d "${TMPDIR:-/tmp}/rimpulse-verify.XXXXXX")"
-trap 'rm -rf -- "$work"' EXIT
+tools_dir="$REPO_ROOT/artifacts/tools"
+created_tool=0
+trap 'rm -rf -- "$work"; if [[ "$created_tool" == "1" ]]; then rm -f -- "$tools_dir/appimagetool-x86_64.AppImage"; fi' EXIT
 publish="$work/publish"
 mkdir -p -- "$publish"
 cat >"$publish/RimPulse" <<'EOF'
@@ -71,9 +90,15 @@ printf 'local data\n' >"$publish/README.txt"
 ln -s README.txt "$publish/linked-readme.txt" # a symlink that stays inside the payload is fine
 
 output="$work/out"
-"$PACKAGING_LINUX_DIR/build-deb.sh" --publish-dir "$publish" --version 0.0.0-test --arch amd64 \
-    --runtime self-contained --output "$output" >/dev/null || fail "build-deb.sh failed"
+deb_output="$("$PACKAGING_LINUX_DIR/build-deb.sh" --publish-dir "$publish" --version 0.0.0-test \
+    --arch amd64 --runtime self-contained --output "$output" 2>&1)" || fail "build-deb.sh failed"
 deb="$output/rimpulse_0.0.0-test_amd64.deb"
+# The install hint must be a command a user can paste: no "./" prefixed to an absolute path.
+if printf '%s' "$deb_output" | grep -qF './/'; then
+    fail "build-deb.sh printed an unusable './'+absolute install path"
+fi
+printf '%s' "$deb_output" | grep -qF "sudo apt install \"$deb\"" ||
+    fail "build-deb.sh install hint does not contain the absolute package path"
 [[ -s "$deb" ]] || fail "no .deb was produced"
 [[ "$(dpkg-deb --field "$deb" Package)" == "rimpulse" ]] || fail "wrong Package field"
 [[ "$(dpkg-deb --field "$deb" Version)" == "0.0.0-test" ]] || fail "wrong Version field"
@@ -143,6 +168,34 @@ for expected in '--appimage-extract-and-run' '--no-appstream' 'RimPulse-0.0.0-te
     grep -qF -- "$expected" "$fake_log" || fail "appimagetool invocation lost '$expected'"
 done
 pass "appimagetool invocation and resulting image are correct (stub tool)"
+
+# 5c. A tool in fetch-appimagetool.sh's default location is auto-detected, so the common flow needs no
+# --appimagetool argument. Skip this assertion on a host that already has appimagetool on PATH (that
+# takes precedence by design).
+if [[ -z "$(command -v appimagetool || true)" && ! -e "$tools_dir/appimagetool-x86_64.AppImage" ]]; then
+    mkdir -p -- "$tools_dir"
+    cp -- "$fake_tool" "$tools_dir/appimagetool-x86_64.AppImage"
+    chmod 755 -- "$tools_dir/appimagetool-x86_64.AppImage"
+    created_tool=1
+    auto_log="$work/auto-detected.log"
+    rm -f -- "$image"
+    FAKE_LOG="$auto_log" "$PACKAGING_LINUX_DIR/build-appimage.sh" --publish-dir "$publish" \
+        --version 0.0.0-test --arch amd64 --output "$output" --extract-and-run >/dev/null ||
+        fail "build-appimage.sh did not auto-detect the fetched tool"
+    [[ -s "$image" ]] || fail "auto-detected tool produced no AppImage"
+    grep -qx 'ARCH=x86_64' "$auto_log" || fail "the auto-detected stub tool did not run"
+    pass "appimagetool is auto-detected from artifacts/tools"
+fi
+
+# A pasted example path must be refused with an actionable message, not a bare "not executable".
+if "$PACKAGING_LINUX_DIR/build-appimage.sh" --publish-dir "$publish" --version 0.0.0-test \
+    --arch amd64 --output "$output" --appimagetool /path/to/appimagetool-x86_64.AppImage \
+    --extract-and-run >"$work/placeholder.log" 2>&1; then
+    fail "build-appimage.sh accepted a placeholder appimagetool path"
+fi
+grep -qF 'placeholder from the docs' "$work/placeholder.log" ||
+    fail "the placeholder error does not explain how to get a real appimagetool"
+pass "placeholder appimagetool paths are refused with guidance"
 
 # 6. Refusals: an unrelated directory and a payload with an escaping symlink must not be packaged.
 if "$PACKAGING_LINUX_DIR/build-deb.sh" --publish-dir "$work" --version 0.0.0-test --output "$output" \

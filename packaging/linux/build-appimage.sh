@@ -18,6 +18,8 @@ Usage: build-appimage.sh --publish-dir DIR [options]
   --appdir-only        keep the staged AppDir instead of building an AppImage
   --extract-and-run    invoke appimagetool with --appimage-extract-and-run (no FUSE needed)
 
+Get a verified tool with `bash packaging/linux/fetch-appimagetool.sh`; a tool in that script's default
+location (artifacts/tools) is picked up automatically, so --appimagetool can then be omitted.
 Produces RimPulse-<version>-<arch>.AppImage, or <output>/RimPulse-<version>-<arch>.AppDir with
 --appdir-only. Environment variables APPIMAGETOOL and APPIMAGETOOL_EXTRACT_AND_RUN are also honoured.
 EOF
@@ -90,16 +92,29 @@ if ((appdir_only)); then
     exit 0
 fi
 
-if [[ -z "$appimagetool" ]] && command -v appimagetool >/dev/null 2>&1; then
-    appimagetool="$(command -v appimagetool)"
-fi
-[[ -n "$appimagetool" ]] || die "No appimagetool. Pass --appimagetool PATH, set APPIMAGETOOL, or use --appdir-only."
-[[ -x "$appimagetool" ]] || die "appimagetool '$appimagetool' is not executable."
-
 case "$ARCH" in
     amd64) appimage_arch="x86_64" ;;
     arm64) appimage_arch="aarch64" ;;
 esac
+
+# fetch-appimagetool.sh writes here by default; pick it up so the common flow needs no path argument.
+local_tool="$REPO_ROOT/artifacts/tools/appimagetool-${appimage_arch}.AppImage"
+if [[ -z "$appimagetool" ]]; then
+    if command -v appimagetool >/dev/null 2>&1; then
+        appimagetool="$(command -v appimagetool)"
+    elif [[ -x "$local_tool" ]]; then
+        appimagetool="$local_tool"
+    fi
+fi
+[[ -n "$appimagetool" ]] ||
+    die "No appimagetool. Run 'bash packaging/linux/fetch-appimagetool.sh' first, pass --appimagetool PATH, set APPIMAGETOOL, or use --appdir-only."
+case "$appimagetool" in
+    */path/to/* | path/to/*)
+        die "'$appimagetool' is the placeholder from the docs. Run 'bash packaging/linux/fetch-appimagetool.sh', then omit --appimagetool or pass the path it prints."
+        ;;
+esac
+[[ -x "$appimagetool" ]] ||
+    die "appimagetool '$appimagetool' is not executable. Run 'bash packaging/linux/fetch-appimagetool.sh' to get a verified copy."
 image="$OUTPUT_DIR/RimPulse-${VERSION}-${appimage_arch}.AppImage"
 rm -f -- "$image"
 
