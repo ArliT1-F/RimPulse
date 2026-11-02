@@ -162,6 +162,7 @@ library (the format subset needed is tiny).
 | D13 | Mods are compiled **in-process with Roslyn**, not by invoking `dotnet build` | A 1.6 mod targets `net472`, which cannot be built on Linux with the .NET SDK, and invoking MSBuild would couple RimPulse to whatever toolchain the author has installed and return unstructured output |
 | D14 | The compiler **emits to memory first** | A failed build must never leave a partially written DLL in `Assemblies/` for the game to load |
 | D15 | Reference assemblies for the Waylith layout come from **the host runtime** (`TRUSTED_PLATFORM_ASSEMBLIES`) | The 1.7 installation ships the game's assemblies, not the whole framework, and RimPulse has no other honest source. Documented as an assumption to re-check against a real 1.7 installation |
+| D17 | The build's output folder comes from **`LoadFolders.xml`**, not from a fixed `<mod>/Assemblies` | A mod that ships `1.6/Assemblies` loads nothing from the root for 1.6, so a DLL written there is ignored with no error anywhere — the mod just appears to have no code. `ModOutputLayout` resolves the folder from the same document the project view shows, names its evidence, and reports a stale root copy or a second loaded folder holding assemblies. When the folders cannot be determined it falls back to the root and says so |
 
 ## 8a. Credits and attribution
 

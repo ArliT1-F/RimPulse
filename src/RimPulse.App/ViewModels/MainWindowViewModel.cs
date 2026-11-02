@@ -276,12 +276,37 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Where the assemblies go, so the write into the mod directory is never a surprise.</summary>
-    public string BuildTargetText => _lastProjectInspection is null
-        ? "Select a project and a usable installation to build."
-        : SelectedInstallation?.Model is { IsUsable: true } installation
-            ? $"Compiles against {installation.DisplayName} ({installation.VersionDisplay}) and writes to " +
-              $"{Path.Combine(_lastProjectInspection.RootPath, "Assemblies")}."
-            : "Select a usable RimWorld installation: a mod can only be compiled against real game assemblies.";
+    public string BuildTargetText
+    {
+        get
+        {
+            if (_lastProjectInspection is null)
+            {
+                return "Select a project and a usable installation to build.";
+            }
+
+            if (SelectedInstallation?.Model is not { IsUsable: true } installation)
+            {
+                return "Select a usable RimWorld installation: a mod can only be compiled against real game assemblies.";
+            }
+
+            var location = ResolveOutputLocation(_lastProjectInspection, installation);
+            return $"Compiles against {installation.DisplayName} ({installation.VersionDisplay}) and writes to " +
+                   $"{location.Directory}. {location.Basis}";
+        }
+    }
+
+    /// <summary>
+    /// The folder this mod's assemblies must be written to for the selected version to load them: the root's
+    /// <c>Assemblies</c> folder for the flat layout, or the version folder <c>LoadFolders.xml</c> names.
+    /// </summary>
+    private static ModOutputLocation ResolveOutputLocation(
+        ModProjectInspection inspection, RimWorldInstallation installation)
+        => ModOutputLayout.Resolve(
+            inspection.RootPath,
+            inspection.LoadFolders,
+            installation.Version,
+            inspection.Metadata?.PackageId);
 
     public bool HasBuildDiagnostics => BuildDiagnostics.Count > 0;
 
@@ -564,7 +589,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 BuildDiagnostics.Add(row);
             }
 
-            var outputDirectory = Path.Combine(inspection.RootPath, "Assemblies");
             var outcome = await Task.Run(() =>
             {
                 var references = GameReferenceResolver.Resolve(installation);
@@ -588,9 +612,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                     buildProperties["RimWorldManagedDir"] = selectedManagedDirectory;
                 }
 
+                // The target folder comes from LoadFolders.xml, not from a fixed root/Assemblies rule: a mod that
+                // ships version folders only has its DLLs loaded from the folder this game version loads.
+                var location = ResolveOutputLocation(inspection, installation);
                 var inputs = BuildInputDiscovery.Discover(inspection.RootPath, searchDirectories, buildProperties);
                 var build = inputs.HasUnits
-                    ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, outputDirectory))
+                    ? ModBuilder.Build(new ModBuildPlan(inputs.Units, references.AssemblyPaths, location.Directory))
                     : null;
 
                 // Read the produced assemblies back from metadata, on the same worker thread: this is what the
@@ -598,7 +625,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 AssemblyInspection[] inspections = build is { Succeeded: true }
                     ? build.OutputPaths.Select(AssemblyInspector.Inspect).ToArray()
                     : [];
-                return (inputs, references, build, inspections);
+                return (inputs, references, build, inspections, location);
             }).ConfigureAwait(true);
 
             // A newer build (or a different project) supersedes this result.
@@ -615,6 +642,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             foreach (var problem in outcome.references.Problems)
             {
                 AddRow(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            // Where the assemblies went, and anything that makes that location worth knowing: a stale copy the
+            // game ignores, a second loaded folder with the same assembly, a folder the build had to create.
+            BuildDetails.Add(new DetailRow("Output folder", outcome.location.Directory));
+            BuildDetails.Add(new DetailRow("Output basis", outcome.location.Basis));
+
+            foreach (var problem in outcome.location.Problems)
+            {
+                AddRow(BuildDiagnosticRow.FromProblem(problem));
+            }
+
+            foreach (var note in outcome.location.Notes)
+            {
+                AddRow(BuildDiagnosticRow.FromProblem(note));
             }
 
             if (outcome.build is null)
@@ -696,13 +738,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 outcome.build,
                 installation.ManagedAssemblyDirectory);
 
+            var output = outcome.build.OutputPaths.Count == 0
+                ? outcome.location.Directory
+                : string.Join(", ", outcome.build.OutputPaths);
+
             if (outcome.build.Succeeded)
             {
-                _log.Info("Build", report.Message, report.Detail);
+                _log.Info("Build", $"{report.Message} Output: {output}. {outcome.location.Basis}", report.Detail);
             }
             else
             {
-                _log.Warning("Build", report.Message, report.Detail);
+                _log.Warning("Build", $"{report.Message} Output folder: {outcome.location.Directory}.", report.Detail);
             }
         }
         finally

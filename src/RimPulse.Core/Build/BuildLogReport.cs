@@ -58,6 +58,7 @@ public static class BuildLogReport
 
         if (build is not null)
         {
+            AppendOutputs(builder, build);
             AppendDiagnostics(builder, build);
         }
 
@@ -144,6 +145,28 @@ public static class BuildLogReport
         if (names.Length > MaxListedReferences)
         {
             builder.Append("  … and ").Append(names.Length - MaxListedReferences).AppendLine(" more");
+        }
+    }
+
+    /// <summary>
+    /// Lists what was actually written. A build's assemblies only load when the game reads the folder they were
+    /// written to, so the log has to name the files, not just the assembly names.
+    /// </summary>
+    private static void AppendOutputs(StringBuilder builder, ModBuildResult build)
+    {
+        var outputs = build.OutputPaths;
+
+        if (outputs.Count == 0)
+        {
+            builder.AppendLine("Output: nothing was written (the build did not succeed or was validation only).");
+            return;
+        }
+
+        builder.Append("Output: ").Append(outputs.Count).AppendLine(" assembly(ies) written");
+
+        foreach (var output in outputs)
+        {
+            builder.Append("  ").AppendLine(output);
         }
     }
 
